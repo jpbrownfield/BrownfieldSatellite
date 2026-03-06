@@ -1,0 +1,5 @@
+{
+  "name": "Brownfield Satellite",
+  "description": "A unified streaming interface that aggregates content across platforms and plays them in an iframe.",
+  "requestFramePermissions": []
+}
