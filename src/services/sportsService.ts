@@ -11,7 +11,8 @@ export async function getLiveSportsEvents(): Promise<MediaItem[]> {
   try {
     const fetchPromises = ATLANTA_TEAMS.map(async (team) => {
       try {
-        const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${team.sport}/${team.league.toLowerCase()}/teams/${team.id}/schedule`);
+        const leagueSlug = team.league === 'MLS' ? 'usa.1' : team.league.toLowerCase();
+        const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${team.sport}/${leagueSlug}/teams/${team.id}/schedule`);
         if (!res.ok) return [];
         const data = await res.json();
         

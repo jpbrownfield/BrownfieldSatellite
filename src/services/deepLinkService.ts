@@ -1,7 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 
 // Note: The platform injects GEMINI_API_KEY into the environment.
-const ai = new GoogleGenAI({ apiKey: (import.meta as any).env?.VITE_GEMINI_API_KEY || (process as any).env?.GEMINI_API_KEY });
+// We use a fallback to ensure it works in both local dev and production build.
+const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  console.warn("GEMINI_API_KEY is missing. AI features will not work.");
+}
+const ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
 
 const MODEL_NAME = "gemini-3.1-flash-lite-preview";
 const CACHE_KEY = 'direct_links_cache_v1';
