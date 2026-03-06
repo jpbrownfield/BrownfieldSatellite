@@ -59,8 +59,9 @@ export default function Player({ item, service, onClose }: PlayerProps) {
         <iframe 
           src={service.url}
           className="w-full h-full border-none"
-          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation allow-storage-access-by-user-activation"
+          referrerPolicy="no-referrer-when-downgrade"
           title={`Playing ${item.title} on ${service.name}`}
         />
       </div>
