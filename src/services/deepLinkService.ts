@@ -1,16 +1,43 @@
-import { GoogleGenAI } from "@google/genai";
-
 // Note: The platform injects GEMINI_API_KEY into the environment.
 // We use a fallback to ensure it works in both local dev and production build.
 const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  console.warn("GEMINI_API_KEY is missing. AI features will not work.");
-}
-const ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
-
 const MODEL_NAME = "gemini-3.1-flash-lite-preview";
 const CACHE_KEY = 'direct_links_cache_v1';
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Direct fetch implementation to bypass SDK-specific CORS issues
+async function callGemini(prompt: string, useSearch: boolean = false) {
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is missing");
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+  
+  const body: any = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+
+  if (useSearch) {
+    body.tools = [{ googleSearch: {} }];
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error("Gemini API Error:", errorData);
+    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
 
 interface CacheEntry<T> {
   data: T;
@@ -65,17 +92,11 @@ export async function findDirectSportsLink(matchup: string, league: string): Pro
     Return ONLY the URL if you can find a direct event link. 
     If you can only find a search page, return "NOT_FOUND".`;
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    const text = await callGemini(prompt, true);
+    const trimmedText = text.trim();
 
-    const text = response.text?.trim();
-    if (text && text !== "NOT_FOUND" && (text.startsWith("http://") || text.startsWith("https://"))) {
-      const urlMatch = text.match(/https?:\/\/[^\s`]+(?:\/[^\s`]+)*/);
+    if (trimmedText && trimmedText !== "NOT_FOUND" && (trimmedText.startsWith("http://") || trimmedText.startsWith("https://"))) {
+      const urlMatch = trimmedText.match(/https?:\/\/[^\s`]+(?:\/[^\s`]+)*/);
       const result = urlMatch ? urlMatch[0] : null;
       if (result) saveToCache(cacheKey, result);
       return result;
@@ -101,17 +122,11 @@ export async function findDirectMediaLink(title: string, type: 'movie' | 'tv', y
     Return ONLY the name of the service and the URL separated by a pipe character, e.g., "Netflix|https://www.netflix.com/title/12345678".
     If you cannot find a direct link, return "NOT_FOUND".`;
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    const text = await callGemini(prompt, true);
+    const trimmedText = text.trim();
 
-    const text = response.text?.trim();
-    if (text && text !== "NOT_FOUND" && text.includes('|')) {
-      const [service, url] = text.split('|').map(s => s.trim());
+    if (trimmedText && trimmedText !== "NOT_FOUND" && trimmedText.includes('|')) {
+      const [service, url] = trimmedText.split('|').map(s => s.trim());
       if (url.startsWith("http://") || url.startsWith("https://")) {
         const urlMatch = url.match(/https?:\/\/[^\s`]+(?:\/[^\s`]+)*/);
         if (urlMatch) {
