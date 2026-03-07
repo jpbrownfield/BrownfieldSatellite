@@ -19,7 +19,7 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   return (
     <div className="w-20 hover:w-64 transition-all duration-300 ease-in-out bg-neutral-950/80 backdrop-blur-md border-r border-white/5 flex flex-col items-start py-8 group z-50 absolute h-full md:relative">
       <div className="px-6 mb-12 w-full flex justify-center group-hover:justify-start">
-        <div className="w-8 h-8 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center font-bold text-xl shrink-0">
+        <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-sky-500 rounded-lg flex items-center justify-center font-bold text-xl shrink-0">
           <Satellite size={20} className="text-white" />
         </div>
         <span className="ml-4 font-bold text-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden group-hover:block">
