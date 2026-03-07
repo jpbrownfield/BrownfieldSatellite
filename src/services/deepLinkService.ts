@@ -11,6 +11,7 @@ async function callGemini(prompt: string, useSearch: boolean = false) {
     throw new Error("GEMINI_API_KEY is missing");
   }
 
+  // Using v1beta because google_search_retrieval is a beta feature
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
   
   const body: any = {
@@ -18,11 +19,20 @@ async function callGemini(prompt: string, useSearch: boolean = false) {
   };
 
   if (useSearch) {
-    body.tools = [{ googleSearch: {} }];
+    // Correct REST syntax for Google Search grounding
+    body.tools = [{
+      google_search_retrieval: {
+        dynamic_retrieval_config: {
+          mode: "MODE_DYNAMIC",
+          dynamic_threshold: 0.3
+        }
+      }
+    }];
   }
 
   const response = await fetch(url, {
     method: 'POST',
+    mode: 'cors',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -31,7 +41,7 @@ async function callGemini(prompt: string, useSearch: boolean = false) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.error("Gemini API Error:", errorData);
+    console.error("Gemini API Error Details:", errorData);
     throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
   }
 
