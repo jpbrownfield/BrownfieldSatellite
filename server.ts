@@ -58,7 +58,7 @@ async function startServer() {
 
     // In cloud environment, we don't actually run the command for security
     if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DESKTOP_LAUNCH) {
-      const command = `"${browserPath}" --app="${url}"`;
+      const command = `"${browserPath}" --app="${url}" --start-fullscreen`;
       return res.json({ 
         success: true, 
         simulated: true, 
@@ -68,7 +68,7 @@ async function startServer() {
     }
 
     // Construct command
-    const command = `"${browserPath}" --app="${url}"`;
+    const command = `"${browserPath}" --app="${url}" --start-fullscreen`;
     
     currentBrowserProcess = exec(command, (error) => {
       if (error && !error.killed) {
@@ -77,6 +77,20 @@ async function startServer() {
     });
 
     res.json({ success: true });
+  });
+
+  // Debug Log Endpoint
+  app.get("/api/debug/log", (req, res) => {
+    try {
+      if (fs.existsSync(logFile)) {
+        const data = fs.readFileSync(logFile, 'utf8');
+        res.header('Content-Type', 'text/plain');
+        return res.send(data);
+      }
+      res.status(404).send("Log file not found");
+    } catch (e: any) {
+      res.status(500).send(`Error reading log: ${e.message}`);
+    }
   });
 
   // Explicit Close Endpoint
@@ -101,6 +115,7 @@ async function startServer() {
   });
 
   app.post("/api/settings", (req, res) => {
+    log(`Received request to save settings: ${JSON.stringify(req.body).substring(0, 100)}...`);
     try {
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(req.body, null, 2));
       log("Settings saved successfully");
@@ -113,6 +128,7 @@ async function startServer() {
 
   // Gemini API Proxy
   app.post("/api/gemini", async (req, res) => {
+    log(`Received Gemini request: ${req.body.prompt?.substring(0, 50)}...`);
     try {
       const { prompt, useSearch, apiKey: clientApiKey } = req.body;
       // Prefer client-provided key, then server env

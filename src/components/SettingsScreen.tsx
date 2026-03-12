@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Globe, Trash2, RefreshCw, Monitor, Shield, ExternalLink, Key } from 'lucide-react';
+import { Check, Globe, Trash2, RefreshCw, Monitor, Shield, ExternalLink, Key, FileText, Terminal, Puzzle, ShoppingBag } from 'lucide-react';
 import { getSettings, saveSettings, AppSettings } from '../utils/settings';
 import { clearCache } from '../services/tmdbService';
 
@@ -33,10 +33,28 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [logs, setLogs] = useState<string>('');
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
   useEffect(() => {
     getSettings().then(setSettings);
+    fetchLogs();
   }, []);
+
+  const fetchLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const response = await fetch('/api/debug/log');
+      if (response.ok) {
+        const text = await response.text();
+        setLogs(text);
+      }
+    } catch (e) {
+      console.error('Failed to fetch logs', e);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
 
   const handleSave = async (newSettings: AppSettings) => {
     setSettings(newSettings);
@@ -71,6 +89,22 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
       setIsRefreshing(false);
       onSettingsChange();
     }, 1000);
+  };
+
+  const handleLaunchExtensionManager = async (url: string) => {
+    if (!settings) return;
+    try {
+      await fetch('/api/desktop/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          browserPath: settings.browserPath,
+          url: url
+        })
+      });
+    } catch (e) {
+      console.error('Failed to launch extension manager', e);
+    }
   };
 
   if (!settings) return null;
@@ -186,8 +220,77 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
         </div>
       </section>
 
+      {/* Extensions Section */}
+      <section className="mb-12">
+        <div className="flex items-center gap-3 mb-6">
+          <Puzzle className="text-neutral-400" size={24} />
+          <h2 className="text-2xl font-semibold">Browser Extensions</h2>
+        </div>
+        <p className="text-neutral-400 mb-6">
+          Since the app uses your local browser, you can install extensions to block ads, skip intros, or improve video quality. 
+          Install them in the standalone window and they will work automatically.
+        </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
+            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+              <ShoppingBag size={18} className="text-blue-400" />
+              Chrome Web Store
+            </h3>
+            <p className="text-sm text-neutral-500 mb-4">Browse and install new extensions for your streaming browser.</p>
+            <button 
+              onClick={() => handleLaunchExtensionManager('https://chrome.google.com/webstore')}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <ExternalLink size={16} />
+              Open Web Store
+            </button>
+          </div>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6">
+            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+              <Monitor size={18} className="text-green-400" />
+              Manage Extensions
+            </h3>
+            <p className="text-sm text-neutral-500 mb-4">View, enable, or configure extensions you've already installed.</p>
+            <button 
+              onClick={() => handleLaunchExtensionManager('chrome://extensions')}
+              className="w-full py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <ExternalLink size={16} />
+              Manage Installed
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-6">
+          <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Recommended for Streaming</h3>
+          <div className="space-y-4">
+            {[
+              { name: 'uBlock Origin', desc: 'The best ad and tracker blocker.', url: 'https://chrome.google.com/webstore/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm' },
+              { name: 'Video Speed Controller', desc: 'Speed up or slow down any HTML5 video.', url: 'https://chrome.google.com/webstore/detail/video-speed-controller/nffaoalbilbmmfgbnbgppihopmeabclm' },
+              { name: 'Netflix 1080p', desc: 'Force 1080p playback on Netflix.', url: 'https://chrome.google.com/webstore/detail/netflix-1080p/jbeiccbachgeoceeonhlbbbaacknbckn' }
+            ].map((ext, i) => (
+              <div key={i} className="flex items-center justify-between py-3 border-b border-neutral-800 last:border-0">
+                <div>
+                  <div className="font-bold">{ext.name}</div>
+                  <div className="text-xs text-neutral-500">{ext.desc}</div>
+                </div>
+                <button 
+                  onClick={() => handleLaunchExtensionManager(ext.url)}
+                  className="p-2 text-neutral-400 hover:text-white transition-colors"
+                  title="Install"
+                >
+                  <ExternalLink size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Data Section */}
-      <section>
+      <section className="mb-12">
         <div className="flex items-center gap-3 mb-6">
           <Trash2 className="text-neutral-400" size={24} />
           <h2 className="text-2xl font-semibold">Data & Cache</h2>
@@ -205,6 +308,41 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
             <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
             {isRefreshing ? 'Refreshing...' : 'Clear Cache'}
           </button>
+        </div>
+      </section>
+
+      {/* Server Logs Section */}
+      <section>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Terminal className="text-neutral-400" size={24} />
+            <h2 className="text-2xl font-semibold">Server Logs</h2>
+          </div>
+          <button 
+            onClick={fetchLogs}
+            disabled={isLoadingLogs}
+            className="flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition-colors"
+          >
+            <RefreshCw size={14} className={isLoadingLogs ? 'animate-spin' : ''} />
+            Refresh Logs
+          </button>
+        </div>
+        <div className="bg-black border border-neutral-800 rounded-2xl p-6 font-mono text-xs overflow-hidden">
+          <div className="flex items-center gap-2 mb-4 text-neutral-500 border-b border-neutral-800 pb-2">
+            <FileText size={14} />
+            <span>server-debug.log</span>
+          </div>
+          <div className="max-h-64 overflow-y-auto space-y-1 custom-scrollbar">
+            {logs ? (
+              logs.split('\n').map((line, i) => (
+                <div key={i} className="whitespace-pre-wrap break-all">
+                  {line}
+                </div>
+              ))
+            ) : (
+              <div className="text-neutral-600 italic">No logs available.</div>
+            )}
+          </div>
         </div>
       </section>
     </div>
