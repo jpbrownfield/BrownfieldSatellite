@@ -3,19 +3,30 @@ import { setMyStuffCookie, getMyStuffCookie } from './cookies';
 export interface AppSettings {
   allowedServices: string[];
   region: string;
+  browserPath: string;
+  enableDesktopMode: boolean;
 }
 
 const SETTINGS_COOKIE = 'app_settings';
 
 const DEFAULT_SERVICES = ['netflix', 'max', 'amazon', 'hulu', 'disney', 'apple', 'paramount', 'peacock', 'directv'];
+const DEFAULT_BROWSER_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 export function getSettings(): AppSettings {
   try {
     const cookie = document.cookie.split('; ').find(row => row.startsWith(`${SETTINGS_COOKIE}=`));
     if (cookie) {
       const settings = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
-      // Migration: Ensure new services are added if they were missing
+      // Migration: Ensure new fields are added if they were missing
       let updated = false;
+      if (settings.browserPath === undefined) {
+        settings.browserPath = DEFAULT_BROWSER_PATH;
+        updated = true;
+      }
+      if (settings.enableDesktopMode === undefined) {
+        settings.enableDesktopMode = false;
+        updated = true;
+      }
       ['apple', 'directv'].forEach(service => {
         if (!settings.allowedServices.includes(service)) {
           settings.allowedServices.push(service);
@@ -31,7 +42,9 @@ export function getSettings(): AppSettings {
   
   return {
     allowedServices: DEFAULT_SERVICES,
-    region: 'US'
+    region: 'US',
+    browserPath: DEFAULT_BROWSER_PATH,
+    enableDesktopMode: false
   };
 }
 

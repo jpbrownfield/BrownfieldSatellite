@@ -1,52 +1,26 @@
 // Note: The platform injects GEMINI_API_KEY into the environment.
 // We use a fallback to ensure it works in both local dev and production build.
-const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-const MODEL_NAME = "gemini-3.1-flash-lite-preview";
 const CACHE_KEY = 'direct_links_cache_v1';
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Direct fetch implementation to bypass SDK-specific CORS issues
+// Direct fetch implementation to bypass SDK-specific CORS issues by using a server-side proxy
 async function callGemini(prompt: string, useSearch: boolean = false) {
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is missing");
-  }
-
-  // Using v1beta because google_search_retrieval is a beta feature
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
-  
-  const body: any = {
-    contents: [{ parts: [{ text: prompt }] }]
-  };
-
-  if (useSearch) {
-    // Correct REST syntax for Google Search grounding
-    body.tools = [{
-      google_search_retrieval: {
-        dynamic_retrieval_config: {
-          mode: "MODE_DYNAMIC",
-          dynamic_threshold: 0.3
-        }
-      }
-    }];
-  }
-
-  const response = await fetch(url, {
+  const response = await fetch('/api/gemini', {
     method: 'POST',
-    mode: 'cors',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ prompt, useSearch })
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.error("Gemini API Error Details:", errorData);
-    throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+    console.error("Gemini Proxy Error Details:", errorData);
+    throw new Error(`Gemini Proxy error: ${response.status} ${response.statusText}`);
   }
 
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return data.text || "";
 }
 
 interface CacheEntry<T> {

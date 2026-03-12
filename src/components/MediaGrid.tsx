@@ -12,11 +12,16 @@ interface MediaGridProps {
 export default function MediaGrid({ title, items, onSelect, myStuff }: MediaGridProps) {
   if (items.length === 0) return null;
   
+  // Final safeguard: Deduplicate items by ID to prevent React key errors
+  const uniqueItems = items.filter((item, index, self) =>
+    index === self.findIndex((t) => t.id === item.id)
+  );
+  
   return (
     <div className="mb-12">
       <h2 className="text-2xl font-bold mb-8 px-4">{title}</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 px-4">
-        {items.map((item) => {
+        {uniqueItems.map((item) => {
           const isStarred = myStuff?.some(i => i.id === item.id);
           return (
             <button

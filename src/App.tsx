@@ -55,7 +55,14 @@ export default function App() {
         setSports(filteredSports);
         
         const stuffIds = getMyStuffCookie();
-        const stuffItems = await Promise.all(stuffIds.map(i => getMediaDetails(i.id, i.type).catch(() => null)));
+        // Deduplicate stuffIds before fetching
+        const uniqueStuffIds = Array.from(new Set(stuffIds.map(i => `${i.id}-${i.type}`)))
+          .map(str => {
+            const [id, type] = str.split('-');
+            return { id, type: type as 'movie' | 'tv' };
+          });
+          
+        const stuffItems = await Promise.all(uniqueStuffIds.map(i => getMediaDetails(i.id, i.type).catch(() => null)));
         const validStuff = stuffItems.filter(i => i !== null) as MediaItem[];
         setMyStuff(validStuff);
       } catch (error) {
@@ -99,8 +106,16 @@ export default function App() {
     return myStuff.some(i => i.id === item.id);
   };
 
+  const handleClosePlayer = () => {
+    const settings = getSettings();
+    if (settings.enableDesktopMode) {
+      fetch('/api/desktop/close', { method: 'POST' }).catch(() => {});
+    }
+    setPlaying(null);
+  };
+
   if (playing) {
-    return <Player item={playing.item} service={playing.service} onClose={() => setPlaying(null)} />;
+    return <Player item={playing.item} service={playing.service} onClose={handleClosePlayer} />;
   }
 
   return (

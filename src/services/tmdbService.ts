@@ -124,9 +124,14 @@ export function clearCache() {
 async function processResults(results: any[], defaultType: 'movie' | 'tv'): Promise<MediaItem[]> {
   const BATCH_SIZE = 5; // Smaller batch size for better rate limit management
   const processedResults: MediaItem[] = [];
+  
+  // Deduplicate raw results first to avoid race conditions in async processing
+  const uniqueRawResults = results.filter((item, index, self) => 
+    index === self.findIndex((t) => t.id === item.id)
+  );
 
-  for (let i = 0; i < results.length; i += BATCH_SIZE) {
-    const batch = results.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < uniqueRawResults.length; i += BATCH_SIZE) {
+    const batch = uniqueRawResults.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.all(
       batch.map(async (item: any) => {
         const type = item.media_type || defaultType;
@@ -143,7 +148,7 @@ async function processResults(results: any[], defaultType: 'movie' | 'tv'): Prom
     processedResults.push(...batchResults.filter((item): item is MediaItem => item !== null));
     
     // Add a small delay between batches to stay under TMDB's 40 requests / 10 seconds limit
-    if (i + BATCH_SIZE < results.length) {
+    if (i + BATCH_SIZE < uniqueRawResults.length) {
       await new Promise(resolve => setTimeout(resolve, 250));
     }
   }

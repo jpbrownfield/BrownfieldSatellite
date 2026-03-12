@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Brownfield Satellite - Loading</title>
+    <style>
+        body {
+            background-color: #0a0a0a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .loader {
+            border: 4px solid #1a1a1a;
+            border-top: 4px solid #00e5ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status {
+            font-size: 14px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader"></div>
+    <h2>Initializing Brownfield Satellite</h2>
+    <p class="status">Starting local content server...</p>
+</body>
+</html>
