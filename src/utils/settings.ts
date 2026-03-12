@@ -4,52 +4,60 @@ export interface AppSettings {
   allowedServices: string[];
   region: string;
   browserPath: string;
-  enableDesktopMode: boolean;
+  tmdbApiKey: string;
+  geminiApiKey: string;
 }
-
-const SETTINGS_COOKIE = 'app_settings';
 
 const DEFAULT_SERVICES = ['netflix', 'max', 'amazon', 'hulu', 'disney', 'apple', 'paramount', 'peacock', 'directv'];
 const DEFAULT_BROWSER_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const DEFAULT_TMDB_KEY = '94e10934d3c360799a710618b1e5406f';
 
-export function getSettings(): AppSettings {
+let cachedSettings: AppSettings | null = null;
+
+export async function getSettings(): Promise<AppSettings> {
+  if (cachedSettings) return cachedSettings;
+
   try {
-    const cookie = document.cookie.split('; ').find(row => row.startsWith(`${SETTINGS_COOKIE}=`));
-    if (cookie) {
-      const settings = JSON.parse(decodeURIComponent(cookie.split('=')[1]));
-      // Migration: Ensure new fields are added if they were missing
-      let updated = false;
-      if (settings.browserPath === undefined) {
-        settings.browserPath = DEFAULT_BROWSER_PATH;
-        updated = true;
-      }
-      if (settings.enableDesktopMode === undefined) {
-        settings.enableDesktopMode = false;
-        updated = true;
-      }
-      ['apple', 'directv'].forEach(service => {
-        if (!settings.allowedServices.includes(service)) {
-          settings.allowedServices.push(service);
-          updated = true;
-        }
-      });
-      if (updated) saveSettings(settings);
-      return settings;
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const settings = await res.json();
+      
+      // Merge with defaults
+      const merged: AppSettings = {
+        allowedServices: settings.allowedServices || DEFAULT_SERVICES,
+        region: settings.region || 'US',
+        browserPath: settings.browserPath || DEFAULT_BROWSER_PATH,
+        tmdbApiKey: settings.tmdbApiKey || DEFAULT_TMDB_KEY,
+        geminiApiKey: settings.geminiApiKey || '',
+      };
+      
+      cachedSettings = merged;
+      return merged;
     }
   } catch (e) {
-    console.error('Failed to parse settings cookie', e);
+    console.error('Failed to fetch settings from backend', e);
   }
   
-  return {
+  const defaults: AppSettings = {
     allowedServices: DEFAULT_SERVICES,
     region: 'US',
     browserPath: DEFAULT_BROWSER_PATH,
-    enableDesktopMode: false
+    tmdbApiKey: DEFAULT_TMDB_KEY,
+    geminiApiKey: '',
   };
+  cachedSettings = defaults;
+  return defaults;
 }
 
-export function saveSettings(settings: AppSettings) {
-  const expires = new Date();
-  expires.setFullYear(expires.getFullYear() + 1);
-  document.cookie = `${SETTINGS_COOKIE}=${encodeURIComponent(JSON.stringify(settings))}; expires=${expires.toUTCString()}; path=/; SameSite=None; Secure`;
+export async function saveSettings(settings: AppSettings) {
+  cachedSettings = settings;
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+  } catch (e) {
+    console.error('Failed to save settings to backend', e);
+  }
 }

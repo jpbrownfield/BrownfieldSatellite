@@ -47,61 +47,55 @@ export default function Player({ item, service, onClose }: PlayerProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const handleOpenExternal = () => {
+  const handleOpenExternal = async () => {
     // If we already have a window, focus it
     if (remoteWindowRef.current && !remoteWindowRef.current.closed) {
       remoteWindowRef.current.focus();
       return;
     }
 
-    const settings = getSettings();
+    const settings = await getSettings();
     
-    // Desktop Mode Launch
-    if (settings.enableDesktopMode) {
-      fetch('/api/desktop/launch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          browserPath: settings.browserPath,
-          url: service.url
-        })
+    // Desktop Mode Launch (Always enabled now)
+    fetch('/api/desktop/launch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        browserPath: settings.browserPath,
+        url: service.url
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.simulated) {
-          alert(`Desktop Launch Simulated!\n\nCommand: ${data.command}\n\nNote: This will open a real window when you run the app locally on your PC.`);
-        } else if (data.error) {
-          alert(`Error: ${data.error}`);
-        } else {
-          setIsRemoteMode(true);
-        }
-      })
-      .catch(err => {
-        console.error("Desktop launch failed", err);
-        alert("Desktop launch failed. Make sure the app is running locally.");
-      });
-      return;
-    }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.simulated) {
+        alert(`Desktop Launch Simulated!\n\nCommand: ${data.command}\n\nNote: This will open a real window when you run the app locally on your PC.`);
+      } else if (data.error) {
+        alert(`Error: ${data.error}`);
+      } else {
+        setIsRemoteMode(true);
+      }
+    })
+    .catch(err => {
+      console.error("Desktop launch failed", err);
+      // Fallback to popup if desktop launch fails (e.g. not running locally)
+      const width = 1280;
+      const height = 720;
+      const left = (window.screen.width / 2) - (width / 2);
+      const top = (window.screen.height / 2) - (height / 2);
 
-    // Calculate window position to center it
-    const width = 1280;
-    const height = 720;
-    const left = (window.screen.width / 2) - (width / 2);
-    const top = (window.screen.height / 2) - (height / 2);
+      const win = window.open(
+        service.url, 
+        'StreamingAppWindow', 
+        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`
+      );
 
-    // Open new standalone window (no address bar/tabs)
-    const win = window.open(
-      service.url, 
-      'StreamingAppWindow', 
-      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`
-    );
-
-    if (win) {
-      remoteWindowRef.current = win;
-      setIsRemoteMode(true);
-    } else {
-      alert("Window blocked! Please allow popups to use Standalone App mode.");
-    }
+      if (win) {
+        remoteWindowRef.current = win;
+        setIsRemoteMode(true);
+      } else {
+        alert("Window blocked! Please allow popups to use Standalone App mode.");
+      }
+    });
   };
 
   const handleCloseAll = () => {

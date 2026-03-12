@@ -36,7 +36,7 @@ export default function App() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const settings = getSettings();
+      const settings = await getSettings();
       try {
         const [m, t, liveSports] = await Promise.all([
           getTrendingMovies().catch(() => []), 
@@ -107,10 +107,7 @@ export default function App() {
   };
 
   const handleClosePlayer = () => {
-    const settings = getSettings();
-    if (settings.enableDesktopMode) {
-      fetch('/api/desktop/close', { method: 'POST' }).catch(() => {});
-    }
+    fetch('/api/desktop/close', { method: 'POST' }).catch(() => {});
     setPlaying(null);
   };
 

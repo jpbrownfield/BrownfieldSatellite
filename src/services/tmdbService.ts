@@ -1,7 +1,6 @@
 import { MediaItem, StreamingService } from '../types';
 import { getSettings } from '../utils/settings';
 
-const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '94e10934d3c360799a710618b1e5406f';
 const BASE_URL = 'https://api.themoviedb.org/3';
 
 const SERVICE_MAPPING: Record<string, string> = {
@@ -17,9 +16,9 @@ const SERVICE_MAPPING: Record<string, string> = {
   'peacock': 'Peacock'
 };
 
-function getCanonicalName(providerName: string): string | null {
+async function getCanonicalName(providerName: string): Promise<string | null> {
   const name = providerName.toLowerCase();
-  const settings = getSettings();
+  const settings = await getSettings();
   
   for (const [key, value] of Object.entries(SERVICE_MAPPING)) {
     if (name.includes(key)) {
@@ -52,8 +51,8 @@ function getServiceUrl(canonicalName: string, title: string, tmdbLink: string): 
 
 async function getProviders(id: number | string, type: 'movie' | 'tv', title: string): Promise<StreamingService[]> {
   try {
-    const settings = getSettings();
-    const res = await fetch(`${BASE_URL}/${type}/${id}/watch/providers?api_key=${TMDB_API_KEY}`);
+    const settings = await getSettings();
+    const res = await fetch(`${BASE_URL}/${type}/${id}/watch/providers?api_key=${settings.tmdbApiKey}`);
     if (!res.ok) return [];
     const data = await res.json();
     
@@ -63,7 +62,7 @@ async function getProviders(id: number | string, type: 'movie' | 'tv', title: st
     const serviceMap = new Map<string, StreamingService>();
 
     for (const provider of regionData.flatrate) {
-      const canonicalName = getCanonicalName(provider.provider_name);
+      const canonicalName = await getCanonicalName(provider.provider_name);
       if (canonicalName && !serviceMap.has(canonicalName)) {
         serviceMap.set(canonicalName, {
           name: canonicalName,
@@ -158,7 +157,8 @@ async function processResults(results: any[], defaultType: 'movie' | 'tv'): Prom
 
 export async function searchMedia(query: string): Promise<MediaItem[]> {
   try {
-    const res = await fetch(`${BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`);
+    const settings = await getSettings();
+    const res = await fetch(`${BASE_URL}/search/multi?api_key=${settings.tmdbApiKey}&query=${encodeURIComponent(query)}`);
     if (!res.ok) return [];
     const data = await res.json();
     const results = data.results.filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv').slice(0, 15);
@@ -170,7 +170,7 @@ export async function searchMedia(query: string): Promise<MediaItem[]> {
 }
 
 export async function getTrendingMovies(): Promise<MediaItem[]> {
-  const settings = getSettings();
+  const settings = await getSettings();
   const cacheKey = `trending_movies_${settings.region}_${settings.allowedServices.sort().join(',')}`;
   const cached = getCache<MediaItem[]>(cacheKey);
   if (cached) return cached;
@@ -178,7 +178,7 @@ export async function getTrendingMovies(): Promise<MediaItem[]> {
   try {
     const pages = [1, 2, 3, 4, 5];
     const responses = await Promise.all(
-      pages.map(page => fetch(`${BASE_URL}/trending/movie/day?api_key=${TMDB_API_KEY}&page=${page}`).then(res => res.json()))
+      pages.map(page => fetch(`${BASE_URL}/trending/movie/day?api_key=${settings.tmdbApiKey}&page=${page}`).then(res => res.json()))
     );
     const allResults = responses.flatMap(data => data.results || []);
     const processed = await processResults(allResults, 'movie');
@@ -191,7 +191,7 @@ export async function getTrendingMovies(): Promise<MediaItem[]> {
 }
 
 export async function getTrendingTv(): Promise<MediaItem[]> {
-  const settings = getSettings();
+  const settings = await getSettings();
   const cacheKey = `trending_tv_${settings.region}_${settings.allowedServices.sort().join(',')}`;
   const cached = getCache<MediaItem[]>(cacheKey);
   if (cached) return cached;
@@ -199,7 +199,7 @@ export async function getTrendingTv(): Promise<MediaItem[]> {
   try {
     const pages = [1, 2, 3, 4, 5];
     const responses = await Promise.all(
-      pages.map(page => fetch(`${BASE_URL}/trending/tv/day?api_key=${TMDB_API_KEY}&page=${page}`).then(res => res.json()))
+      pages.map(page => fetch(`${BASE_URL}/trending/tv/day?api_key=${settings.tmdbApiKey}&page=${page}`).then(res => res.json()))
     );
     const allResults = responses.flatMap(data => data.results || []);
     const processed = await processResults(allResults, 'tv');
@@ -213,7 +213,8 @@ export async function getTrendingTv(): Promise<MediaItem[]> {
 
 export async function getMediaDetails(id: string, type: 'movie' | 'tv'): Promise<MediaItem | null> {
   try {
-    const res = await fetch(`${BASE_URL}/${type}/${id}?api_key=${TMDB_API_KEY}`);
+    const settings = await getSettings();
+    const res = await fetch(`${BASE_URL}/${type}/${id}?api_key=${settings.tmdbApiKey}`);
     if (!res.ok) return null;
     const item = await res.json();
     

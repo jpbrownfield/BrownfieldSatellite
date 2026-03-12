@@ -3,14 +3,21 @@
 const CACHE_KEY = 'direct_links_cache_v1';
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+import { getSettings } from '../utils/settings';
+
 // Direct fetch implementation to bypass SDK-specific CORS issues by using a server-side proxy
 async function callGemini(prompt: string, useSearch: boolean = false) {
+  const settings = await getSettings();
   const response = await fetch('/api/gemini', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ prompt, useSearch })
+    body: JSON.stringify({ 
+      prompt, 
+      useSearch,
+      apiKey: settings.geminiApiKey 
+    })
   });
 
   if (!response.ok) {

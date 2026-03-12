@@ -85,14 +85,41 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // Persistent Settings Endpoints
+  const SETTINGS_FILE = path.join(process.cwd(), 'app-settings.json');
+
+  app.get("/api/settings", (req, res) => {
+    try {
+      if (fs.existsSync(SETTINGS_FILE)) {
+        const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+        return res.json(JSON.parse(data));
+      }
+    } catch (e) {
+      log(`Error reading settings: ${e}`);
+    }
+    res.json({});
+  });
+
+  app.post("/api/settings", (req, res) => {
+    try {
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(req.body, null, 2));
+      log("Settings saved successfully");
+      res.json({ success: true });
+    } catch (e: any) {
+      log(`Error saving settings: ${e.message}`);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Gemini API Proxy
   app.post("/api/gemini", async (req, res) => {
     try {
-      const { prompt, useSearch } = req.body;
-      const apiKey = process.env.GEMINI_API_KEY;
+      const { prompt, useSearch, apiKey: clientApiKey } = req.body;
+      // Prefer client-provided key, then server env
+      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
-        return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server" });
+        return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
       }
 
       const ai = new GoogleGenAI({ apiKey });
