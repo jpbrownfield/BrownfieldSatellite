@@ -7,6 +7,11 @@ const { GoogleGenAI } = require('@google/genai');
 const logFile = path.join(app.getPath('userData'), 'launcher-debug.log');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'app-settings.json');
 
+// Clear log file on startup to avoid confusion with old errors
+try {
+  fs.writeFileSync(logFile, `--- New Session: ${new Date().toISOString()} ---\n`);
+} catch (e) {}
+
 function log(message) {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] ${message}\n`;
@@ -17,6 +22,7 @@ function log(message) {
 }
 
 log('--- App Starting (Desktop Mode) ---');
+log(`Platform: ${process.platform}, Arch: ${process.arch}`);
 
 let mainWindow;
 let currentBrowserProcess = null;
@@ -93,10 +99,14 @@ ipcMain.handle('settings:save', async (event, settings) => {
 });
 
 ipcMain.handle('gemini:call', async (event, { prompt, useSearch, apiKey }) => {
-  log(`Gemini call requested: ${prompt.substring(0, 50)}...`);
+  log(`Gemini call requested. Prompt length: ${prompt.length}, Search: ${useSearch}`);
   try {
-    if (!apiKey) throw new Error("Gemini API Key is missing");
+    if (!apiKey) {
+      log("Error: Gemini API Key is missing");
+      throw new Error("Gemini API Key is missing");
+    }
     
+    log(`Initializing Gemini with key (length: ${apiKey.length})`);
     const ai = new GoogleGenAI({ apiKey });
     
     const config = {};
@@ -104,15 +114,26 @@ ipcMain.handle('gemini:call', async (event, { prompt, useSearch, apiKey }) => {
       config.tools = [{ googleSearch: {} }];
     }
 
+    // Reverted to gemini-3-flash-preview as requested
+    const modelName = "gemini-3-flash-preview";
+    log(`Calling model: ${modelName}`);
+
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: modelName,
       contents: [{ parts: [{ text: prompt }] }],
       config
     });
 
+    log("Gemini call successful");
     return { text: response.text || "" };
   } catch (error) {
-    log(`Gemini error: ${error.message}`);
+    log(`Gemini CRITICAL error: ${error.message}`);
+    if (error.stack) log(`Stack: ${error.stack}`);
+    
+    // Provide a more helpful error message for "fetch failed"
+    if (error.message === 'fetch failed') {
+      throw new Error("Gemini API connection failed. Please check your internet connection or firewall settings.");
+    }
     throw error;
   }
 });
