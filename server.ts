@@ -48,8 +48,10 @@ async function startServer() {
   // Desktop Launch Endpoint
   app.post("/api/desktop/launch", (req, res) => {
     const { browserPath, url } = req.body;
+    log(`Desktop launch requested: ${url} using ${browserPath}`);
     
     if (!browserPath || !url) {
+      log("Error: browserPath and url are required");
       return res.status(400).json({ error: "browserPath and url are required" });
     }
 
@@ -70,6 +72,15 @@ async function startServer() {
     // Construct command
     const command = `"${browserPath}" --app="${url}" --start-fullscreen`;
     
+    // Check if path exists (only if not simulated)
+    if (process.platform === 'win32' && !fs.existsSync(browserPath)) {
+      log(`Error: Browser not found at ${browserPath}`);
+      return res.status(404).json({ 
+        error: "Browser not found", 
+        details: `The file "${browserPath}" does not exist. Please check your settings.` 
+      });
+    }
+
     currentBrowserProcess = exec(command, (error) => {
       if (error && !error.killed) {
         console.error("Exec error:", error);
@@ -77,6 +88,29 @@ async function startServer() {
     });
 
     res.json({ success: true });
+  });
+
+  // Validate Browser Path Endpoint
+  app.post("/api/desktop/validate-path", (req, res) => {
+    const { path: browserPath } = req.body;
+    
+    if (!browserPath) {
+      return res.status(400).json({ exists: false, message: "Path is required" });
+    }
+
+    // In cloud environment, we can't check the user's local path
+    if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DESKTOP_LAUNCH) {
+      return res.json({ 
+        exists: true, 
+        message: "Path format looks valid (Cloud Simulation)" 
+      });
+    }
+
+    if (fs.existsSync(browserPath)) {
+      res.json({ exists: true, message: "Browser found!" });
+    } else {
+      res.json({ exists: false, message: "File not found at this path." });
+    }
   });
 
   // Debug Log Endpoint

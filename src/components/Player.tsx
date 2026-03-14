@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, ExternalLink, Shield, ShieldAlert, PlayCircle } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Shield, ShieldAlert, PlayCircle, RefreshCw } from 'lucide-react';
 import { MediaItem, StreamingService } from '../types';
 import { getSettings } from '../utils/settings';
 
@@ -25,32 +25,37 @@ export default function Player({ item, service, onClose }: PlayerProps) {
   }, []);
 
   const handleLaunch = async () => {
+    console.log(`Attempting to launch: ${service.url}`);
     setIsLaunching(true);
     const settings = await getSettings();
     
     // Desktop Mode Launch
-    fetch('/api/desktop/launch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        browserPath: settings.browserPath,
-        url: service.url
-      })
-    })
-    .then(res => res.json())
-    .then(data => {
+    try {
+      const response = await fetch('/api/desktop/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          browserPath: settings.browserPath,
+          url: service.url
+        })
+      });
+
+      const data = await response.json();
+
       if (data.simulated) {
+        console.log("Launch simulated", data.command);
         alert(`Desktop Launch Simulated!\n\nCommand: ${data.command}\n\nNote: This will open a real window when you run the app locally on your PC.`);
         setIsRemoteMode(true);
       } else if (data.error) {
-        alert(`Error: ${data.error}`);
-        onClose(); // Go back if it fails
+        console.error("Launch error from server", data.error);
+        alert(`Error: ${data.error}\n\n${data.details || ''}`);
+        onClose(); 
       } else {
+        console.log("Launch successful");
         setIsRemoteMode(true);
       }
-    })
-    .catch(err => {
-      console.error("Desktop launch failed", err);
+    } catch (err) {
+      console.error("Desktop launch fetch failed", err);
       // Fallback to popup
       const width = 1280;
       const height = 720;
@@ -67,13 +72,13 @@ export default function Player({ item, service, onClose }: PlayerProps) {
         remoteWindowRef.current = win;
         setIsRemoteMode(true);
       } else {
-        alert("Window blocked! Please allow popups to use Standalone App mode.");
-        onClose();
+        // If we get here, it's likely a popup blocker issue
+        // We'll stay on the launch screen but allow manual retry
+        console.warn("Popup blocked or launch failed");
       }
-    })
-    .finally(() => {
+    } finally {
       setIsLaunching(false);
-    });
+    }
   };
 
   const handleFocus = () => {
@@ -117,7 +122,7 @@ export default function Player({ item, service, onClose }: PlayerProps) {
             onClick={handleFocus}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 focus:ring-2 focus:ring-white outline-none rounded-md transition-all font-bold"
           >
-            <span className="hidden md:inline">Focus App</span>
+            <span className="hidden md:inline">{isLaunching ? "Retry Launch" : "Focus App"}</span>
             <ExternalLink size={18} />
           </button>
         </div>
@@ -149,11 +154,10 @@ export default function Player({ item, service, onClose }: PlayerProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-lg">
             <button 
               onClick={handleFocus}
-              disabled={isLaunching}
-              className="flex items-center justify-center gap-3 px-8 py-6 bg-white text-black rounded-2xl font-bold text-lg hover:bg-neutral-200 transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-3 px-8 py-6 bg-white text-black rounded-2xl font-bold text-lg hover:bg-neutral-200 transition-all"
             >
               <ExternalLink size={24} />
-              Focus App Window
+              {isLaunching ? "Try Launching Again" : "Focus App Window"}
             </button>
             <button 
               onClick={handleCloseAll}

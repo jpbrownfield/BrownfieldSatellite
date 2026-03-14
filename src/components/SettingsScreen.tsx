@@ -56,6 +56,28 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
     }
   };
 
+  const [isTestingPath, setIsTestingPath] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean, message: string} | null>(null);
+
+  const testBrowserPath = async () => {
+    if (!settings) return;
+    setIsTestingPath(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/desktop/validate-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: settings.browserPath })
+      });
+      const data = await res.json();
+      setTestResult({ success: data.exists, message: data.message });
+    } catch (e) {
+      setTestResult({ success: false, message: "Failed to connect to server for validation." });
+    } finally {
+      setIsTestingPath(false);
+    }
+  };
+
   const handleSave = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     setSaveStatus('saving');
@@ -157,6 +179,21 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
               placeholder="C:\Program Files\Google\Chrome\Application\chrome.exe"
               className="w-full bg-black border border-neutral-800 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-neutral-600 transition-all font-mono text-sm"
             />
+            <div className="mt-4 flex items-center gap-4">
+              <button 
+                onClick={testBrowserPath}
+                disabled={isTestingPath}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {isTestingPath ? <RefreshCw size={14} className="animate-spin" /> : <Monitor size={14} />}
+                Test Path
+              </button>
+              {testResult && (
+                <span className={`text-sm font-medium ${testResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                  {testResult.message}
+                </span>
+              )}
+            </div>
             <p className="mt-3 text-xs text-neutral-500 flex items-center gap-2">
               <Shield size={12} />
               Desktop Mode is active. Set the path to your local Chrome or Edge executable.
