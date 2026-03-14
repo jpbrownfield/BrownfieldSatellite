@@ -9,6 +9,7 @@ import { getTrendingMovies, getTrendingTv, getMediaDetails } from './services/tm
 import { getLiveSportsEvents } from './services/sportsService';
 import { getMyStuffCookie, setMyStuffCookie } from './utils/cookies';
 import { getSettings } from './utils/settings';
+import { bridge } from './utils/bridge';
 import { MediaItem, StreamingService } from './types';
 
 // Components
@@ -106,8 +107,8 @@ export default function App() {
     return myStuff.some(i => i.id === item.id);
   };
 
-  const handleClosePlayer = () => {
-    fetch('/api/desktop/close', { method: 'POST' }).catch(() => {});
+  const handleClosePlayer = async () => {
+    await bridge.invoke('desktop:close').catch(() => {});
     setPlaying(null);
   };
 

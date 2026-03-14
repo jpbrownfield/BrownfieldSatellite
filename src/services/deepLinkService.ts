@@ -3,30 +3,18 @@
 const CACHE_KEY = 'direct_links_cache_v1';
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+import { bridge } from '../utils/bridge';
 import { getSettings } from '../utils/settings';
 
-// Direct fetch implementation to bypass SDK-specific CORS issues by using a server-side proxy
+// Direct fetch implementation to bypass SDK-specific CORS issues by using a server-side proxy (or Electron IPC)
 async function callGemini(prompt: string, useSearch: boolean = false) {
   const settings = await getSettings();
-  const response = await fetch('/api/gemini', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ 
-      prompt, 
-      useSearch,
-      apiKey: settings.geminiApiKey 
-    })
+  const data = await bridge.invoke('gemini:call', { 
+    prompt, 
+    useSearch,
+    apiKey: settings.geminiApiKey 
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    console.error("Gemini Proxy Error Details:", errorData);
-    throw new Error(`Gemini Proxy error: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
   return data.text || "";
 }
 

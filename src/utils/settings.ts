@@ -1,4 +1,4 @@
-import { setMyStuffCookie, getMyStuffCookie } from './cookies';
+import { bridge } from './bridge';
 
 export interface AppSettings {
   allowedServices: string[];
@@ -18,24 +18,21 @@ export async function getSettings(): Promise<AppSettings> {
   if (cachedSettings) return cachedSettings;
 
   try {
-    const res = await fetch('/api/settings');
-    if (res.ok) {
-      const settings = await res.json();
-      
-      // Merge with defaults
-      const merged: AppSettings = {
-        allowedServices: settings.allowedServices || DEFAULT_SERVICES,
-        region: settings.region || 'US',
-        browserPath: settings.browserPath || DEFAULT_BROWSER_PATH,
-        tmdbApiKey: settings.tmdbApiKey || DEFAULT_TMDB_KEY,
-        geminiApiKey: settings.geminiApiKey || process.env.GEMINI_API_KEY || '',
-      };
-      
-      cachedSettings = merged;
-      return merged;
-    }
+    const settings = await bridge.invoke('settings:get');
+    
+    // Merge with defaults
+    const merged: AppSettings = {
+      allowedServices: settings.allowedServices || DEFAULT_SERVICES,
+      region: settings.region || 'US',
+      browserPath: settings.browserPath || DEFAULT_BROWSER_PATH,
+      tmdbApiKey: settings.tmdbApiKey || DEFAULT_TMDB_KEY,
+      geminiApiKey: settings.geminiApiKey || process.env.GEMINI_API_KEY || '',
+    };
+    
+    cachedSettings = merged;
+    return merged;
   } catch (e) {
-    console.error('Failed to fetch settings from backend', e);
+    console.error('Failed to fetch settings', e);
   }
   
   const defaults: AppSettings = {
@@ -52,12 +49,8 @@ export async function getSettings(): Promise<AppSettings> {
 export async function saveSettings(settings: AppSettings) {
   cachedSettings = settings;
   try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings)
-    });
+    await bridge.invoke('settings:save', settings);
   } catch (e) {
-    console.error('Failed to save settings to backend', e);
+    console.error('Failed to save settings', e);
   }
 }

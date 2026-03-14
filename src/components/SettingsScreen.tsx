@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Check, Globe, Trash2, RefreshCw, Monitor, Shield, ExternalLink, Key, FileText, Terminal, Puzzle, ShoppingBag } from 'lucide-react';
+import { bridge } from '../utils/bridge';
 import { getSettings, saveSettings, AppSettings } from '../utils/settings';
 import { clearCache } from '../services/tmdbService';
 
@@ -44,11 +45,8 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
   const fetchLogs = async () => {
     setIsLoadingLogs(true);
     try {
-      const response = await fetch('/api/debug/log');
-      if (response.ok) {
-        const text = await response.text();
-        setLogs(text);
-      }
+      const text = await bridge.invoke('debug:get-logs');
+      setLogs(text);
     } catch (e) {
       console.error('Failed to fetch logs', e);
     } finally {
@@ -64,15 +62,10 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
     setIsTestingPath(true);
     setTestResult(null);
     try {
-      const res = await fetch('/api/desktop/validate-path', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: settings.browserPath })
-      });
-      const data = await res.json();
+      const data = await bridge.invoke('desktop:validate-path', settings.browserPath);
       setTestResult({ success: data.exists, message: data.message });
     } catch (e) {
-      setTestResult({ success: false, message: "Failed to connect to server for validation." });
+      setTestResult({ success: false, message: "Failed to connect for validation." });
     } finally {
       setIsTestingPath(false);
     }

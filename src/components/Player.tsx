@@ -3,6 +3,8 @@ import { ArrowLeft, ExternalLink, Shield, ShieldAlert, PlayCircle, RefreshCw } f
 import { MediaItem, StreamingService } from '../types';
 import { getSettings } from '../utils/settings';
 
+import { bridge } from '../utils/bridge';
+
 interface PlayerProps {
   item: MediaItem;
   service: StreamingService;
@@ -31,50 +33,47 @@ export default function Player({ item, service, onClose }: PlayerProps) {
     
     // Desktop Mode Launch
     try {
-      const response = await fetch('/api/desktop/launch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          browserPath: settings.browserPath,
-          url: service.url
-        })
+      const data = await bridge.invoke('desktop:launch', {
+        browserPath: settings.browserPath,
+        url: service.url
       });
-
-      const data = await response.json();
 
       if (data.simulated) {
         console.log("Launch simulated", data.command);
         alert(`Desktop Launch Simulated!\n\nCommand: ${data.command}\n\nNote: This will open a real window when you run the app locally on your PC.`);
         setIsRemoteMode(true);
       } else if (data.error) {
-        console.error("Launch error from server", data.error);
+        console.error("Launch error", data.error);
         alert(`Error: ${data.error}\n\n${data.details || ''}`);
         onClose(); 
       } else {
         console.log("Launch successful");
         setIsRemoteMode(true);
       }
-    } catch (err) {
-      console.error("Desktop launch fetch failed", err);
-      // Fallback to popup
-      const width = 1280;
-      const height = 720;
-      const left = (window.screen.width / 2) - (width / 2);
-      const top = (window.screen.height / 2) - (height / 2);
+    } catch (err: any) {
+      console.error("Desktop launch failed", err);
+      // Fallback to popup if not in Electron
+      if (!bridge.isElectron) {
+        const width = 1280;
+        const height = 720;
+        const left = (window.screen.width / 2) - (width / 2);
+        const top = (window.screen.height / 2) - (height / 2);
 
-      const win = window.open(
-        service.url, 
-        'StreamingAppWindow', 
-        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`
-      );
+        const win = window.open(
+          service.url, 
+          'StreamingAppWindow', 
+          `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`
+        );
 
-      if (win) {
-        remoteWindowRef.current = win;
-        setIsRemoteMode(true);
+        if (win) {
+          remoteWindowRef.current = win;
+          setIsRemoteMode(true);
+        } else {
+          console.warn("Popup blocked or launch failed");
+        }
       } else {
-        // If we get here, it's likely a popup blocker issue
-        // We'll stay on the launch screen but allow manual retry
-        console.warn("Popup blocked or launch failed");
+        alert(`Launch failed: ${err.message}`);
+        onClose();
       }
     } finally {
       setIsLaunching(false);
@@ -89,10 +88,11 @@ export default function Player({ item, service, onClose }: PlayerProps) {
     }
   };
 
-  const handleCloseAll = () => {
+  const handleCloseAll = async () => {
     if (remoteWindowRef.current && !remoteWindowRef.current.closed) {
       remoteWindowRef.current.close();
     }
+    await bridge.invoke('desktop:close').catch(() => {});
     onClose();
   };
 
