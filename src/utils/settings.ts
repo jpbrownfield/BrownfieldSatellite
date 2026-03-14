@@ -28,7 +28,7 @@ export async function getSettings(): Promise<AppSettings> {
         region: settings.region || 'US',
         browserPath: settings.browserPath || DEFAULT_BROWSER_PATH,
         tmdbApiKey: settings.tmdbApiKey || DEFAULT_TMDB_KEY,
-        geminiApiKey: settings.geminiApiKey || '',
+        geminiApiKey: settings.geminiApiKey || process.env.GEMINI_API_KEY || '',
       };
       
       cachedSettings = merged;
@@ -43,7 +43,7 @@ export async function getSettings(): Promise<AppSettings> {
     region: 'US',
     browserPath: DEFAULT_BROWSER_PATH,
     tmdbApiKey: DEFAULT_TMDB_KEY,
-    geminiApiKey: '',
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
   };
   cachedSettings = defaults;
   return defaults;

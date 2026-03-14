@@ -171,8 +171,8 @@ try {
       log(`Received Gemini request: ${req.body.prompt?.substring(0, 50)}...`);
       try {
         const { prompt, useSearch, apiKey: clientApiKey } = req.body;
-        // Prefer client-provided key, then server env
-        const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+        // Prefer client-provided key, then server env (case-insensitive check)
+        const apiKey = clientApiKey || process.env.GEMINI_API_KEY || process.env.gemini_api_key;
 
         if (!apiKey) {
           return res.status(500).json({ error: "GEMINI_API_KEY is not configured" });
