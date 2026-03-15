@@ -150,7 +150,8 @@ ipcMain.handle('gemini:call', async (event, { prompt, useSearch, apiKey }) => {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(data)
       },
-      timeout: 30000 
+      timeout: 30000,
+      rejectUnauthorized: false // Bypass self-signed certificate errors common in proxied environments
     };
 
     log(`Calling REST API: ${modelName}`);
