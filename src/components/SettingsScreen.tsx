@@ -109,13 +109,9 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
   const handleLaunchExtensionManager = async (url: string) => {
     if (!settings) return;
     try {
-      await fetch('/api/desktop/launch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          browserPath: settings.browserPath,
-          url: url
-        })
+      await bridge.invoke('desktop:launch', {
+        browserPath: settings.browserPath,
+        url: url
       });
     } catch (e) {
       console.error('Failed to launch extension manager', e);

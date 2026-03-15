@@ -2,7 +2,7 @@ const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
 const fs = require('fs');
-const { GoogleGenAI } = require('@google/genai');
+const https = require('https');
 
 const logFile = path.join(app.getPath('userData'), 'launcher-debug.log');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'app-settings.json');
@@ -48,7 +48,8 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url }) => {
   log(`Desktop launch requested: ${url} using ${browserPath}`);
   killCurrentBrowser();
 
-  const command = `"${browserPath}" --app="${url}" --start-fullscreen`;
+  // Launch in app mode (no top bar) but without immediate fullscreen
+  const command = `"${browserPath}" --app="${url}"`;
   
   if (process.platform === 'win32' && !fs.existsSync(browserPath)) {
     log(`Error: Browser not found at ${browserPath}`);
@@ -60,6 +61,33 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url }) => {
       log(`Exec error: ${error.message}`);
     }
   });
+
+  // Wait 3 seconds, then try to focus and fullscreen via PowerShell (Windows only)
+  if (process.platform === 'win32') {
+    setTimeout(() => {
+      try {
+        log('Attempting to focus and fullscreen browser window...');
+        // Heuristic: look for a window with the domain in the title
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname.replace('www.', '');
+        
+        const psCommand = `
+          $wshell = New-Object -ComObject WScript.Shell;
+          $app = Get-Process | Where-Object {$_.MainWindowTitle -like "*${domain}*"} | Select-Object -First 1;
+          if ($app) {
+            $wshell.AppActivate($app.Id);
+            Start-Sleep -Seconds 1;
+            $wshell.SendKeys('{F11}');
+          }
+        `;
+        exec(`powershell -Command "${psCommand.replace(/\n/g, ' ')}"`, (err) => {
+          if (err) log(`PowerShell error: ${err.message}`);
+        });
+      } catch (e) {
+        log(`Failed to trigger auto-fullscreen: ${e.message}`);
+      }
+    }, 3000);
+  }
 
   return { success: true };
 });
@@ -106,26 +134,69 @@ ipcMain.handle('gemini:call', async (event, { prompt, useSearch, apiKey }) => {
       throw new Error("Gemini API Key is missing");
     }
     
-    log(`Initializing Gemini with key (length: ${apiKey.length})`);
-    const ai = new GoogleGenAI({ apiKey });
+    log(`Initializing Gemini REST call (key length: ${apiKey.length})`);
     
-    const config = {};
-    if (useSearch) {
-      config.tools = [{ googleSearch: {} }];
-    }
-
-    // Reverted to gemini-3-flash-preview as requested
     const modelName = "gemini-3-flash-preview";
-    log(`Calling model: ${modelName}`);
-
-    const response = await ai.models.generateContent({
-      model: modelName,
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    
+    const data = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      config
+      tools: useSearch ? [{ googleSearch: {} }] : []
     });
 
-    log("Gemini call successful");
-    return { text: response.text || "" };
+    const options = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout: 30000 
+    };
+
+    log(`Calling REST API: ${modelName}`);
+    
+    const result = await new Promise((resolve, reject) => {
+      const req = https.request(url, options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => body += chunk);
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(body);
+            if (res.statusCode !== 200) {
+              log(`Gemini API Error (${res.statusCode}): ${body}`);
+              return reject(new Error(`Gemini API Error: ${json.error?.message || body}`));
+            }
+            
+            const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            log("Gemini call successful");
+            resolve({ text });
+          } catch (e) {
+            log(`Error parsing Gemini response: ${e.message}`);
+            reject(new Error("Failed to parse Gemini response"));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        log(`Gemini REST CRITICAL error: ${error.message}`);
+        if (error.message.includes('ENOTFOUND') || error.message.includes('ETIMEDOUT')) {
+          reject(new Error("Gemini API connection failed. Please check your internet connection or firewall settings."));
+        } else {
+          reject(error);
+        }
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        log("Gemini REST request timed out");
+        reject(new Error("Gemini API request timed out."));
+      });
+
+      req.write(data);
+      req.end();
+    });
+
+    return result;
   } catch (error) {
     log(`Gemini CRITICAL error: ${error.message}`);
     if (error.stack) log(`Stack: ${error.stack}`);
