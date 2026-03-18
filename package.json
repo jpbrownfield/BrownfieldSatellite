@@ -22,7 +22,6 @@
       "electron-main.cjs",
       "preload.js",
       "package.json",
-      "node_modules/**/*",
       ".env",
       "loading.html"
     ],
