@@ -29,19 +29,29 @@ export const bridge: Bridge = {
         }
 
         case 'gemini:call': {
-          const { prompt, apiKey } = args[0];
+          const { prompt, apiKey, useSearch } = args[0];
+          console.log(`[Bridge Web Fallback] Gemini Call Requested. API Key Length: ${apiKey?.length || 0}, Search: ${useSearch}`);
+          
           if (!apiKey) throw new Error("Gemini API Key is missing. Please add it in Settings.");
           
           try {
             const ai = new GoogleGenAI({ apiKey });
+            console.log(`[Bridge Web Fallback] Calling Gemini model with prompt: "${prompt.substring(0, 50)}..."`);
+            
             const response = await ai.models.generateContent({
-              model: "gemini-3-flash-preview",
-              contents: [{ parts: [{ text: prompt }] }],
+              model: "gemini-3.1-flash-lite-preview",
+              contents: prompt,
+              config: {
+                tools: useSearch ? [{ googleSearch: {} }] : []
+              }
             });
+            
+            console.log(`[Bridge Web Fallback] Gemini Call Successful. Response:`, response);
             return { text: response.text || "" };
           } catch (error: any) {
             console.error("Gemini Web Call Error:", error);
-            throw error;
+            const detail = error.message || "Unknown error";
+            throw new Error(`Gemini Call Failed: ${detail}`);
           }
         }
 

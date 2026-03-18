@@ -71,6 +71,27 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
     }
   };
 
+  const [isTestingGemini, setIsTestingGemini] = useState(false);
+  const [geminiTestResult, setGeminiTestResult] = useState<{success: boolean, message: string} | null>(null);
+
+  const testGemini = async () => {
+    if (!settings) return;
+    setIsTestingGemini(true);
+    setGeminiTestResult(null);
+    try {
+      const data = await bridge.invoke('gemini:call', { 
+        prompt: "Hello, this is a test message. Please respond with 'Gemini is working!'.", 
+        apiKey: settings.geminiApiKey 
+      });
+      setGeminiTestResult({ success: true, message: data.text });
+    } catch (e: any) {
+      console.error('Gemini Test Failed:', e);
+      setGeminiTestResult({ success: false, message: e.message || "Unknown error occurred." });
+    } finally {
+      setIsTestingGemini(false);
+    }
+  };
+
   const handleSave = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     setSaveStatus('saving');
@@ -156,6 +177,26 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
               onChange={(e) => handleSave({ ...settings, geminiApiKey: e.target.value })}
               className="w-full bg-black border border-neutral-800 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-neutral-600 transition-all font-mono text-sm"
             />
+            <div className="mt-4 flex items-center gap-4">
+              <button 
+                onClick={testGemini}
+                disabled={isTestingGemini}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {isTestingGemini ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Test Gemini
+              </button>
+              {geminiTestResult && (
+                <span className={`text-sm font-medium ${geminiTestResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                  {geminiTestResult.success ? 'Success!' : geminiTestResult.message}
+                </span>
+              )}
+            </div>
+            {geminiTestResult?.success && (
+              <div className="mt-2 p-3 bg-neutral-800/50 rounded-lg text-xs text-neutral-300 font-mono">
+                {geminiTestResult.message}
+              </div>
+            )}
             <p className="mt-2 text-xs text-neutral-500">Used for deep link discovery and smart search.</p>
           </div>
 

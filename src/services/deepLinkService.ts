@@ -77,13 +77,15 @@ export async function findDirectSportsLink(matchup: string, league: string): Pro
     if (trimmedText && trimmedText !== "NOT_FOUND" && (trimmedText.startsWith("http://") || trimmedText.startsWith("https://"))) {
       const urlMatch = trimmedText.match(/https?:\/\/[^\s`]+(?:\/[^\s`]+)*/);
       const result = urlMatch ? urlMatch[0] : null;
-      if (result) saveToCache(cacheKey, result);
-      return result;
+      if (result) {
+        saveToCache(cacheKey, result);
+        return result;
+      }
     }
     return null;
   } catch (error) {
     console.error("Failed to find sports deep link:", error);
-    return null;
+    throw error;
   }
 }
 
@@ -118,6 +120,6 @@ export async function findDirectMediaLink(title: string, type: 'movie' | 'tv', y
     return null;
   } catch (error) {
     console.error("Failed to find media deep link:", error);
-    return null;
+    throw error;
   }
 }

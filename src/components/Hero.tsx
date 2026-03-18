@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Info, Star, ArrowLeft, Loader2 } from 'lucide-react';
+import { Play, Info, Star, ArrowLeft, Loader2, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { MediaItem, StreamingService } from '../types';
 import { findDirectSportsLink, findDirectMediaLink } from '../services/deepLinkService';
@@ -15,7 +15,7 @@ interface HeroProps {
 export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }: HeroProps) {
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const [directLink, setDirectLink] = useState<{ service: string, url: string } | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found' | 'error'>('idle');
 
   useEffect(() => {
     // Focus back button on mount for remote/keyboard navigation
@@ -31,24 +31,30 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
 
     // Search for direct link
     if (item.type === 'live' && item.league) {
-      setIsSearching(true);
+      setSearchStatus('searching');
       setDirectLink(null);
       findDirectSportsLink(item.title, item.league).then(link => {
         if (link) {
           setDirectLink({ service: item.league === 'MLS' ? 'Apple TV' : 'DirecTV', url: link });
+          setSearchStatus('found');
+        } else {
+          setSearchStatus('not_found');
         }
-        setIsSearching(false);
       }).catch(() => {
-        setIsSearching(false);
+        setSearchStatus('error');
       });
     } else if (item.type === 'movie' || item.type === 'tv') {
-      setIsSearching(true);
+      setSearchStatus('searching');
       setDirectLink(null);
       findDirectMediaLink(item.title, item.type, item.year).then(link => {
-        setDirectLink(link);
-        setIsSearching(false);
+        if (link) {
+          setDirectLink(link);
+          setSearchStatus('found');
+        } else {
+          setSearchStatus('not_found');
+        }
       }).catch(() => {
-        setIsSearching(false);
+        setSearchStatus('error');
       });
     }
 
@@ -122,14 +128,14 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
         </p>
         
         <div className="flex flex-wrap gap-4">
-          {isSearching && (
+          {searchStatus === 'searching' && (
             <div className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold animate-pulse">
               <Loader2 size={20} className="animate-spin" />
               Finding direct link...
             </div>
           )}
 
-          {directLink && (
+          {searchStatus === 'found' && directLink && (
             <button
               onClick={() => onPlay({ name: directLink.service, url: directLink.url })}
               className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-full font-bold hover:bg-blue-500 focus:ring-4 focus:ring-white/50 focus:scale-105 outline-none transition-all shadow-lg shadow-blue-600/20"
@@ -139,13 +145,27 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
             </button>
           )}
 
+          {searchStatus === 'not_found' && (
+            <div className="flex items-center gap-2 px-6 py-3 bg-neutral-900 border border-neutral-800 text-neutral-500 rounded-full font-semibold">
+              <X size={20} />
+              No Direct Link Found
+            </div>
+          )}
+
+          {searchStatus === 'error' && (
+            <div className="flex items-center gap-2 px-6 py-3 bg-red-900/20 border border-red-900/50 text-red-400 rounded-full font-semibold">
+              <X size={20} />
+              Search Error
+            </div>
+          )}
+
           {item.services.length > 0 ? (
             item.services.map((service, idx) => (
               <button
                 key={idx}
                 onClick={() => onPlay(service)}
                 className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold outline-none transition-all ${
-                  idx === 0 && !directLink && !isSearching
+                  idx === 0 && searchStatus !== 'found' && searchStatus !== 'searching'
                     ? 'bg-white text-black hover:bg-neutral-200 focus:bg-neutral-200 focus:ring-4 focus:ring-white/50 focus:scale-105'
                     : 'bg-neutral-800/80 backdrop-blur-md text-white hover:bg-neutral-700 focus:bg-neutral-700 focus:ring-4 focus:ring-white/50 focus:scale-105'
                 }`}
@@ -154,7 +174,7 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
                 {service.url.includes('search') ? `Search on ${service.name}` : `Watch on ${service.name}`}
               </button>
             ))
-          ) : !isSearching && !directLink && (
+          ) : searchStatus !== 'searching' && searchStatus !== 'found' && (
             <button disabled className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold cursor-not-allowed">
               Not available to stream
             </button>

@@ -136,7 +136,7 @@ ipcMain.handle('gemini:call', async (event, { prompt, useSearch, apiKey }) => {
     
     log(`Initializing Gemini REST call (key length: ${apiKey.length})`);
     
-    const modelName = "gemini-3-flash-preview";
+    const modelName = "gemini-3.1-flash-lite-preview";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     const data = JSON.stringify({
@@ -144,39 +144,55 @@ ipcMain.handle('gemini:call', async (event, { prompt, useSearch, apiKey }) => {
       tools: useSearch ? [{ googleSearch: {} }] : []
     });
 
-    const options = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      },
-      timeout: 30000,
-      rejectUnauthorized: false // Bypass self-signed certificate errors common in proxied environments
-    };
+      const options = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data),
+          'User-Agent': 'Electron/BrownfieldSatellite'
+        },
+        timeout: 30000,
+        rejectUnauthorized: false 
+      };
 
-    log(`Calling REST API: ${modelName}`);
-    
-    const result = await new Promise((resolve, reject) => {
-      const req = https.request(url, options, (res) => {
-        let body = '';
-        res.on('data', (chunk) => body += chunk);
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(body);
-            if (res.statusCode !== 200) {
-              log(`Gemini API Error (${res.statusCode}): ${body}`);
-              return reject(new Error(`Gemini API Error: ${json.error?.message || body}`));
-            }
+      log(`Calling REST API: ${modelName}`);
+      
+      const result = await new Promise((resolve, reject) => {
+        const req = https.request(url, options, (res) => {
+          let body = '';
+          res.on('data', (chunk) => body += chunk);
+          res.on('end', () => {
+            log(`Gemini API Response Status: ${res.statusCode}`);
+            log(`Content-Type: ${res.headers['content-type']}`);
             
-            const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            log("Gemini call successful");
-            resolve({ text });
-          } catch (e) {
-            log(`Error parsing Gemini response: ${e.message}`);
-            reject(new Error("Failed to parse Gemini response"));
-          }
+            try {
+              // Check status code BEFORE parsing JSON
+              if (res.statusCode !== 200) {
+                log(`Gemini API Error (${res.statusCode}): ${body.substring(0, 500)}`);
+                let errorMessage = `Gemini API Error (${res.statusCode})`;
+                try {
+                  const json = JSON.parse(body);
+                  errorMessage = json.error?.message || errorMessage;
+                } catch (e) {
+                  // If not JSON, it might be an HTML error page from a proxy
+                  if (body.includes('<html') || body.includes('<!DOCTYPE html')) {
+                    errorMessage = "Network error: The API returned an HTML page. This often means a proxy or firewall is blocking the request.";
+                  }
+                }
+                return reject(new Error(errorMessage));
+              }
+
+              const json = JSON.parse(body);
+              const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              log("Gemini call successful");
+              resolve({ text });
+            } catch (e) {
+              log(`Error parsing Gemini response: ${e.message}`);
+              log(`Body snippet: ${body.substring(0, 200)}`);
+              reject(new Error("Failed to parse Gemini response. The server returned invalid data."));
+            }
+          });
         });
-      });
 
       req.on('error', (error) => {
         log(`Gemini REST CRITICAL error: ${error.message}`);
