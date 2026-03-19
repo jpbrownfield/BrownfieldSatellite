@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Info, Star, ArrowLeft, Loader2, X } from 'lucide-react';
-import { motion } from 'motion/react';
-import { MediaItem, StreamingService } from '../types';
-import { findDirectSportsLink, findDirectMediaLink } from '../services/deepLinkService';
+import { Play, Info, Star, ArrowLeft, Loader2, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { MediaItem, StreamingService, Season, Episode } from '../types';
+import { findDirectSportsLink, findDirectMediaLink, findDirectEpisodeLink } from '../services/deepLinkService';
+import { getTvEpisodes } from '../services/tmdbService';
 
 interface HeroProps {
   item: MediaItem;
@@ -16,6 +17,12 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const [directLink, setDirectLink] = useState<{ service: string, url: string } | null>(null);
   const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found' | 'error'>('idle');
+  
+  // TV Show specific state
+  const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
 
   useEffect(() => {
     // Focus back button on mount for remote/keyboard navigation
@@ -29,7 +36,7 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
 
     window.addEventListener('keydown', handleKeyDown);
 
-    // Search for direct link
+    // Initial search for direct link (Movie or Show main page)
     if (item.type === 'live' && item.league) {
       setSearchStatus('searching');
       setDirectLink(null);
@@ -58,8 +65,53 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
       });
     }
 
+    // If it's a TV show, pre-select the first season
+    if (item.type === 'tv' && item.seasons && item.seasons.length > 0) {
+      const firstSeason = item.seasons.find(s => s.seasonNumber > 0) || item.seasons[0];
+      setSelectedSeason(firstSeason);
+    }
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, item]);
+
+  // Fetch episodes when season changes
+  useEffect(() => {
+    if (item.type === 'tv' && selectedSeason) {
+      setLoadingEpisodes(true);
+      getTvEpisodes(item.id, selectedSeason.seasonNumber).then(data => {
+        setEpisodes(data);
+        setLoadingEpisodes(false);
+      }).catch(() => {
+        setLoadingEpisodes(false);
+      });
+    }
+  }, [item.id, item.type, selectedSeason]);
+
+  const handleEpisodeSelect = async (episode: Episode) => {
+    setSelectedEpisode(episode);
+    setSearchStatus('searching');
+    setDirectLink(null);
+    
+    try {
+      const link = await findDirectEpisodeLink(
+        item.title, 
+        selectedSeason?.seasonNumber || 1, 
+        episode.episodeNumber, 
+        episode.name,
+        item.year
+      );
+      
+      if (link) {
+        setDirectLink(link);
+        setSearchStatus('found');
+        // Automatically play if found? Maybe not, let user click "Watch"
+      } else {
+        setSearchStatus('not_found');
+      }
+    } catch (e) {
+      setSearchStatus('error');
+    }
+  };
 
   return (
     <motion.div 
@@ -126,12 +178,60 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
         <p className="text-lg text-neutral-400 mb-8 line-clamp-3">
           {item.description}
         </p>
+
+        {/* TV Show Season/Episode Selector */}
+        {item.type === 'tv' && item.seasons && (
+          <div className="mb-10">
+            <div className="flex items-center gap-4 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+              {item.seasons.map((season) => (
+                <button
+                  key={season.id}
+                  onClick={() => setSelectedSeason(season)}
+                  className={`px-4 py-2 rounded-lg whitespace-nowrap transition-all outline-none focus:ring-2 focus:ring-white ${
+                    selectedSeason?.id === season.id 
+                      ? 'bg-white text-black font-bold' 
+                      : 'bg-neutral-800 text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  {season.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+              {loadingEpisodes ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-24 bg-neutral-900 rounded-xl animate-pulse"></div>
+                ))
+              ) : (
+                episodes.map((episode) => (
+                  <button
+                    key={episode.id}
+                    onClick={() => handleEpisodeSelect(episode)}
+                    className={`flex flex-col items-start p-4 rounded-xl text-left transition-all outline-none focus:ring-2 focus:ring-white ${
+                      selectedEpisode?.id === episode.id
+                        ? 'bg-blue-600/20 border border-blue-500'
+                        : 'bg-neutral-900 border border-transparent hover:border-neutral-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Episode {episode.episodeNumber}</span>
+                      <span className="text-[10px] text-neutral-500">{episode.airDate}</span>
+                    </div>
+                    <h4 className="font-semibold mb-2 line-clamp-1">{episode.name}</h4>
+                    <p className="text-xs text-neutral-500 line-clamp-2">{episode.overview || 'No description available.'}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
         
         <div className="flex flex-wrap gap-4">
           {searchStatus === 'searching' && (
             <div className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold animate-pulse">
               <Loader2 size={20} className="animate-spin" />
-              Finding direct link...
+              {selectedEpisode ? `Finding Episode ${selectedEpisode.episodeNumber} link...` : 'Finding direct link...'}
             </div>
           )}
 
@@ -141,7 +241,7 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
               className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-full font-bold hover:bg-blue-500 focus:ring-4 focus:ring-white/50 focus:scale-105 outline-none transition-all shadow-lg shadow-blue-600/20"
             >
               <Play size={20} className="fill-current" />
-              Watch Direct on {directLink.service}
+              {selectedEpisode ? `Watch S${selectedSeason?.seasonNumber}E${selectedEpisode.episodeNumber} on ${directLink.service}` : `Watch Direct on ${directLink.service}`}
             </button>
           )}
 

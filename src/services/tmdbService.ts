@@ -1,4 +1,4 @@
-import { MediaItem, StreamingService } from '../types';
+import { MediaItem, StreamingService, Season, Episode } from '../types';
 import { getSettings } from '../utils/settings';
 
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -211,6 +211,43 @@ export async function getTrendingTv(): Promise<MediaItem[]> {
   }
 }
 
+export async function getTvSeasons(id: string): Promise<Season[]> {
+  try {
+    const settings = await getSettings();
+    const res = await fetch(`${BASE_URL}/tv/${id}?api_key=${settings.tmdbApiKey}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    
+    return (data.seasons || []).map((s: any) => ({
+      id: s.id.toString(),
+      seasonNumber: s.season_number,
+      name: s.name,
+      episodeCount: s.episode_count
+    }));
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function getTvEpisodes(id: string, seasonNumber: number): Promise<Episode[]> {
+  try {
+    const settings = await getSettings();
+    const res = await fetch(`${BASE_URL}/tv/${id}/season/${seasonNumber}?api_key=${settings.tmdbApiKey}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    
+    return (data.episodes || []).map((e: any) => ({
+      id: e.id.toString(),
+      episodeNumber: e.episode_number,
+      name: e.name,
+      overview: e.overview,
+      airDate: e.air_date
+    }));
+  } catch (e) {
+    return [];
+  }
+}
+
 export async function getMediaDetails(id: string, type: 'movie' | 'tv'): Promise<MediaItem | null> {
   try {
     const settings = await getSettings();
@@ -223,7 +260,13 @@ export async function getMediaDetails(id: string, type: 'movie' | 'tv'): Promise
     
     if (services.length === 0) return null;
     
-    return { ...baseItem, services };
+    const mediaItem: MediaItem = { ...baseItem, services };
+    
+    if (type === 'tv') {
+      mediaItem.seasons = await getTvSeasons(id);
+    }
+    
+    return mediaItem;
   } catch (e) {
     return null;
   }

@@ -89,6 +89,48 @@ export async function findDirectSportsLink(matchup: string, league: string): Pro
   }
 }
 
+export async function findDirectEpisodeLink(
+  showTitle: string, 
+  seasonNumber: number, 
+  episodeNumber: number, 
+  episodeTitle: string,
+  year?: string
+): Promise<{ service: string, url: string } | null> {
+  const cacheKey = `episode:${showTitle}:S${seasonNumber}E${episodeNumber}:${year || 'any'}`;
+  const cached = getFromCache<{ service: string, url: string }>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const prompt = `Find the direct streaming URL for the TV show episode: "${showTitle}" Season ${seasonNumber}, Episode ${episodeNumber} - "${episodeTitle}" ${year ? `(${year})` : ''}. 
+    I am looking for a direct link to the specific episode player or episode page on a major streaming service (Netflix, Disney+, Hulu, Max, Amazon Prime Video, Apple TV+, etc.). 
+    A direct link usually ends with an ID or a slug for that specific episode. 
+    Example Netflix: https://www.netflix.com/watch/12345678?trackId=...
+    Example Disney+: https://www.disneyplus.com/video/12345678
+    Example Max: https://play.max.com/video/watch/12345678
+    Return ONLY the name of the service and the URL separated by a pipe character, e.g., "Netflix|https://www.netflix.com/watch/12345678".
+    If you cannot find a direct link to the specific episode, return "NOT_FOUND".`;
+
+    const text = await callGemini(prompt, true);
+    const trimmedText = text.trim();
+
+    if (trimmedText && trimmedText !== "NOT_FOUND" && trimmedText.includes('|')) {
+      const [service, url] = trimmedText.split('|').map(s => s.trim());
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        const urlMatch = url.match(/https?:\/\/[^\s`]+(?:\/[^\s`]+)*/);
+        if (urlMatch) {
+          const result = { service, url: urlMatch[0] };
+          saveToCache(cacheKey, result);
+          return result;
+        }
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Failed to find episode deep link:", error);
+    throw error;
+  }
+}
+
 export async function findDirectMediaLink(title: string, type: 'movie' | 'tv', year?: string): Promise<{ service: string, url: string } | null> {
   const cacheKey = `media:${type}:${title}:${year || 'any'}`;
   const cached = getFromCache<{ service: string, url: string }>(cacheKey);
