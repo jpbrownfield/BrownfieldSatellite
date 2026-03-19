@@ -75,9 +75,15 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url }) => {
           $wshell = New-Object -ComObject WScript.Shell;
           $app = Get-Process | Where-Object {$_.MainWindowTitle -like "*${domain}*"} | Select-Object -First 1;
           if ($app) {
-            $wshell.AppActivate($app.Id);
-            Start-Sleep -Seconds 1;
-            $wshell.SendKeys('{F11}');
+            try {
+              $wshell.AppActivate($app.Id);
+              Start-Sleep -Seconds 1;
+              $wshell.SendKeys('{F11}');
+            } catch {
+              Write-Error "Failed to activate or send keys: $_";
+            }
+          } else {
+            Write-Warning "No window found with title containing '${domain}'";
           }
         `;
         exec(`powershell -Command "${psCommand.replace(/\n/g, ' ')}"`, (err) => {

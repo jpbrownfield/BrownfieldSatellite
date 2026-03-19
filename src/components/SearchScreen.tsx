@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search as SearchIcon, X, Play, Star } from 'lucide-react';
 import { searchMedia } from '../services/tmdbService';
 import { MediaItem, StreamingService } from '../types';
@@ -14,6 +14,11 @@ export default function SearchScreen({ onPlay, myStuff, onToggleStar, onSelect }
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
@@ -35,6 +40,7 @@ export default function SearchScreen({ onPlay, myStuff, onToggleStar, onSelect }
       <div className="relative max-w-3xl w-full mx-auto mb-12">
         <SearchIcon className="absolute left-6 top-1/2 -translate-y-1/2 text-neutral-400" size={28} />
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

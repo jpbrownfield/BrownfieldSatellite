@@ -35,6 +35,64 @@ export default function App() {
   const [playing, setPlaying] = useState<{item: MediaItem, service: StreamingService} | null>(null);
 
   useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Basic spatial navigation for remote/keyboard
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+
+      const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      const elements = Array.from(document.querySelectorAll(focusableSelector)) as HTMLElement[];
+      const current = document.activeElement as HTMLElement;
+
+      if (!current || !elements.includes(current)) {
+        if (elements.length > 0) elements[0].focus();
+        return;
+      }
+
+      const rect = current.getBoundingClientRect();
+      let bestMatch: HTMLElement | null = null;
+      let minDistance = Infinity;
+
+      const getDistance = (r1: DOMRect, r2: DOMRect, direction: string) => {
+        const c1 = { x: r1.left + r1.width / 2, y: r1.top + r1.height / 2 };
+        const c2 = { x: r2.left + r2.width / 2, y: r2.top + r2.height / 2 };
+
+        // Directional constraints
+        if (direction === 'ArrowUp' && r2.bottom > r1.top + 5) return Infinity;
+        if (direction === 'ArrowDown' && r2.top < r1.bottom - 5) return Infinity;
+        if (direction === 'ArrowLeft' && r2.right > r1.left + 5) return Infinity;
+        if (direction === 'ArrowRight' && r2.left < r1.right - 5) return Infinity;
+
+        // Weighted distance (prefer elements in the same axis)
+        const dx = Math.abs(c1.x - c2.x);
+        const dy = Math.abs(c1.y - c2.y);
+        
+        if (direction === 'ArrowUp' || direction === 'ArrowDown') {
+          return dy + dx * 2; // Penalize horizontal offset for vertical movement
+        } else {
+          return dx + dy * 2; // Penalize vertical offset for horizontal movement
+        }
+      };
+
+      elements.forEach(el => {
+        if (el === current) return;
+        const distance = getDistance(rect, el.getBoundingClientRect(), e.key);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestMatch = el;
+        }
+      });
+
+      if (bestMatch) {
+        e.preventDefault();
+        bestMatch.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [loading, activeTab, featured]);
+
+  useEffect(() => {
     async function load() {
       setLoading(true);
       const settings = await getSettings();
@@ -74,6 +132,18 @@ export default function App() {
     }
     load();
   }, [refreshKey]);
+
+  useEffect(() => {
+    if (!loading && !featured) {
+      const timer = setTimeout(() => {
+        const firstFocusable = document.querySelector('button, input, [tabindex="0"]') as HTMLElement;
+        if (firstFocusable && (document.activeElement === document.body || !document.activeElement)) {
+          firstFocusable.focus();
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, activeTab, featured]);
 
   const handleSettingsChange = () => {
     setRefreshKey(prev => prev + 1);
