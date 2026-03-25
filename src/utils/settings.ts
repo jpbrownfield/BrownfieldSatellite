@@ -4,12 +4,14 @@ export interface AppSettings {
   allowedServices: string[];
   region: string;
   browserPath: string;
+  userAgent: string;
   tmdbApiKey: string;
   geminiApiKey: string;
 }
 
 const DEFAULT_SERVICES = ['netflix', 'max', 'amazon', 'hulu', 'disney', 'apple', 'paramount', 'peacock', 'directv'];
 const DEFAULT_BROWSER_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_TMDB_KEY = '94e10934d3c360799a710618b1e5406f';
 
 let cachedSettings: AppSettings | null = null;
@@ -25,6 +27,7 @@ export async function getSettings(): Promise<AppSettings> {
       allowedServices: settings.allowedServices || DEFAULT_SERVICES,
       region: settings.region || 'US',
       browserPath: settings.browserPath || DEFAULT_BROWSER_PATH,
+      userAgent: settings.userAgent || DEFAULT_USER_AGENT,
       tmdbApiKey: settings.tmdbApiKey || DEFAULT_TMDB_KEY,
       geminiApiKey: settings.geminiApiKey || process.env.GEMINI_API_KEY || '',
     };
@@ -39,6 +42,7 @@ export async function getSettings(): Promise<AppSettings> {
     allowedServices: DEFAULT_SERVICES,
     region: 'US',
     browserPath: DEFAULT_BROWSER_PATH,
+    userAgent: DEFAULT_USER_AGENT,
     tmdbApiKey: DEFAULT_TMDB_KEY,
     geminiApiKey: process.env.GEMINI_API_KEY || '',
   };

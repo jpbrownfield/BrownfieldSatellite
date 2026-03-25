@@ -35,7 +35,8 @@ export default function Player({ item, service, onClose }: PlayerProps) {
     try {
       const data = await bridge.invoke('desktop:launch', {
         browserPath: settings.browserPath,
-        url: service.url
+        url: service.url,
+        userAgent: settings.userAgent
       });
 
       if (data.simulated) {

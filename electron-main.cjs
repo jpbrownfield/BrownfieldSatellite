@@ -44,12 +44,26 @@ const killCurrentBrowser = () => {
 };
 
 // IPC Handlers
-ipcMain.handle('desktop:launch', async (event, { browserPath, url }) => {
-  log(`Desktop launch requested: ${url} using ${browserPath}`);
+ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) => {
+  log(`Desktop launch requested: ${url} using ${browserPath} (UA: ${userAgent})`);
   killCurrentBrowser();
 
   // Launch in app mode (no top bar) but without immediate fullscreen
-  const command = `"${browserPath}" --app="${url}"`;
+  // Added flags to prevent redirects and automation detection
+  const flags = [
+    `--app="${url}"`,
+    '--start-maximized',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-blink-features=AutomationControlled',
+    '--password-store=basic', // Avoid some auth prompts
+  ];
+
+  if (userAgent) {
+    flags.push(`--user-agent="${userAgent}"`);
+  }
+
+  const command = `"${browserPath}" ${flags.join(' ')}`;
   
   if (process.platform === 'win32' && !fs.existsSync(browserPath)) {
     log(`Error: Browser not found at ${browserPath}`);

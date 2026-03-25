@@ -103,10 +103,10 @@ export async function findDirectEpisodeLink(
   try {
     const prompt = `Find the direct streaming URL for the TV show episode: "${showTitle}" Season ${seasonNumber}, Episode ${episodeNumber} - "${episodeTitle}" ${year ? `(${year})` : ''}. 
     I am looking for a direct link to the specific episode player or episode page on a major streaming service (Netflix, Disney+, Hulu, Max, Amazon Prime Video, Apple TV+, etc.). 
-    A direct link usually ends with an ID or a slug for that specific episode. 
-    Example Netflix: https://www.netflix.com/watch/12345678?trackId=...
-    Example Disney+: https://www.disneyplus.com/video/12345678
-    Example Max: https://play.max.com/video/watch/12345678
+    IMPORTANT: Prefer the most stable direct link that avoids home page redirects. 
+    For Netflix, prefer "https://www.netflix.com/watch/[id]" but ensure the ID is the REAL Netflix content ID.
+    For Disney+, prefer "https://www.disneyplus.com/video/[id]".
+    For Max, prefer "https://play.max.com/video/watch/[id]".
     Return ONLY the name of the service and the URL separated by a pipe character, e.g., "Netflix|https://www.netflix.com/watch/12345678".
     If you cannot find a direct link to the specific episode, return "NOT_FOUND".`;
 
@@ -139,9 +139,9 @@ export async function findDirectMediaLink(title: string, type: 'movie' | 'tv', y
   try {
     const prompt = `Find the direct streaming URL for the ${type}: "${title}" ${year ? `(${year})` : ''}. 
     I am looking for a direct link to the movie or show page on a major streaming service (Netflix, Disney+, Hulu, Max, Amazon Prime Video, Apple TV+, etc.). 
-    A direct link usually ends with an ID or a slug for that specific title. 
-    Example Netflix: https://www.netflix.com/title/12345678
-    Example Disney+: https://www.disneyplus.com/movies/title-slug/12345678
+    IMPORTANT: Prefer the most stable direct link that avoids home page redirects. 
+    For Netflix, prefer "https://www.netflix.com/title/[id]".
+    For Disney+, prefer "https://www.disneyplus.com/movies/[slug]/[id]".
     Return ONLY the name of the service and the URL separated by a pipe character, e.g., "Netflix|https://www.netflix.com/title/12345678".
     If you cannot find a direct link, return "NOT_FOUND".`;
 

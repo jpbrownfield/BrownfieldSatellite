@@ -229,6 +229,34 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
               Desktop Mode is active. Set the path to your local Chrome or Edge executable.
             </p>
           </div>
+
+          <div className="pt-6 border-t border-neutral-800">
+            <label className="block text-sm font-bold text-neutral-400 uppercase tracking-widest mb-3">Browser User Agent</label>
+            <input 
+              type="text"
+              value={settings.userAgent}
+              onChange={(e) => handleSave({ ...settings, userAgent: e.target.value })}
+              className="w-full bg-black border border-neutral-800 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-neutral-600 transition-all font-mono text-sm"
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                { name: 'Default Desktop', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                { name: 'Smart TV (WebOS)', ua: 'Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36 SmartTV/8.3.0 (V8.3.0-22)' },
+                { name: 'Apple TV', ua: 'Mozilla/5.0 (Apple TV; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' }
+              ].map((preset, i) => (
+                <button 
+                  key={i}
+                  onClick={() => handleSave({ ...settings, userAgent: preset.ua })}
+                  className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-md text-[10px] font-bold transition-all"
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-neutral-500">
+              Spoofing a Smart TV user agent can sometimes trigger remote-friendly UIs, but may also break some sites.
+            </p>
+          </div>
         </div>
       </section>
 
