@@ -16,12 +16,25 @@ export default function Player({ item, service, onClose }: PlayerProps) {
   const [isLaunching, setIsLaunching] = useState(true);
   const remoteWindowRef = React.useRef<Window | null>(null);
 
-  // Cleanup remote window on unmount
+  // Cleanup remote window and handle remote-control closes on unmount/mount
   React.useEffect(() => {
+    // Listen for the remote shortcut to close the video remotely from the couch
+    const handleRemoteClose = () => {
+      console.log("Stream closed via remote shortcut.");
+      onClose();
+    };
+
+    if (bridge.isElectron) {
+      bridge.on('desktop:closed-remotely', handleRemoteClose);
+    }
+
     handleLaunch();
     return () => {
       if (remoteWindowRef.current && !remoteWindowRef.current.closed) {
         remoteWindowRef.current.close();
+      }
+      if (bridge.isElectron) {
+        bridge.removeListener('desktop:closed-remotely', handleRemoteClose);
       }
     };
   }, []);
@@ -50,15 +63,36 @@ export default function Player({ item, service, onClose }: PlayerProps) {
       } else {
         console.log("Launch successful");
         setIsRemoteMode(true);
+        
+        if (settings.apiKey) {
+          console.log("Attempting AI Auto-Play. Waiting for page to visually settle...");
+          try {
+            setIsLaunching(true);
+            
+            // 1. First pass: find the show logo
+            // (The desktop:auto-play backend handles waiting for network/DOM mutations)
+            await bridge.invoke('desktop:auto-play', { targetText: `the logo or cover for ${item.title}`, apiKey: settings.apiKey });
+            console.log("First pass clicked show, evaluating second pass...");
+            
+            // 2. Second pass: find the play button (wait for modal/page transition)
+            await bridge.invoke('desktop:auto-play', { targetText: "the primary 'Play', 'Watch', or episode button", apiKey: settings.apiKey });
+            console.log("Auto-Play completed!");
+            
+          } catch (aiErr: any) {
+            console.error("Auto-Play failed (but stream is open):", aiErr);
+          } finally {
+            setIsLaunching(false);
+          }
+        }
       }
     } catch (err: any) {
       console.error("Desktop launch failed", err);
       // Fallback to popup if not in Electron
       if (!bridge.isElectron) {
-        const width = 1280;
-        const height = 720;
-        const left = (window.screen.width / 2) - (width / 2);
-        const top = (window.screen.height / 2) - (height / 2);
+        const width = window.screen.availWidth;
+        const height = window.screen.availHeight;
+        const left = 0;
+        const top = 0;
 
         const win = window.open(
           service.url, 

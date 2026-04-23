@@ -2,6 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 
 interface Bridge {
   invoke: (channel: string, ...args: any[]) => Promise<any>;
+  on: (channel: string, func: (...args: any[]) => void) => void;
+  removeListener: (channel: string, func: (...args: any[]) => void) => void;
   isElectron: boolean;
 }
 
@@ -58,10 +60,10 @@ export const bridge: Bridge = {
         case 'desktop:launch': {
           const { url } = args[0];
           // In the browser, we simulate a launch by opening a popup
-          const width = 1280;
-          const height = 720;
-          const left = (window.screen.width / 2) - (width / 2);
-          const top = (window.screen.height / 2) - (height / 2);
+          const width = window.screen.availWidth;
+          const height = window.screen.availHeight;
+          const left = 0;
+          const top = 0;
 
           const win = window.open(
             url, 
@@ -83,6 +85,10 @@ export const bridge: Bridge = {
           return { success: true };
         }
 
+        case 'desktop:auto-play': {
+          return { success: false, error: "Auto-play simulated in browser preview." };
+        }
+
         case 'debug:get-logs': {
           return "Logs are only available in the desktop executable.";
         }
@@ -91,5 +97,11 @@ export const bridge: Bridge = {
           throw new Error(`Unknown bridge channel: ${channel}`);
       }
     }
+  },
+  on: (channel: string, func: (...args: any[]) => void) => {
+    if (isElectron) (window as any).electron.ipcRenderer.on(channel, func);
+  },
+  removeListener: (channel: string, func: (...args: any[]) => void) => {
+    if (isElectron) (window as any).electron.ipcRenderer.removeListener(channel, func);
   }
 };

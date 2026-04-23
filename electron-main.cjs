@@ -1,8 +1,9 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const { exec } = require('child_process');
 const fs = require('fs');
 const https = require('https');
+const puppeteer = require('puppeteer-core');
 
 const logFile = path.join(app.getPath('userData'), 'launcher-debug.log');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'app-settings.json');
@@ -41,12 +42,31 @@ const killCurrentBrowser = () => {
     }
     currentBrowserProcess = null;
   }
+  // Unregister the shortcuts so normal keyboard behavior returns
+  globalShortcut.unregister('Home');
+  globalShortcut.unregister('BrowserHome');
+  globalShortcut.unregister('Escape');
 };
 
 // IPC Handlers
 ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) => {
   log(`Desktop launch requested: ${url} using ${browserPath} (UA: ${userAgent})`);
   killCurrentBrowser();
+
+  // Register remote control global shortcuts to close the stream
+  const closeStream = () => {
+    log("Remote Home/Esc key pressed! Closing stream...");
+    killCurrentBrowser();
+    
+    // Notify the frontend that it was closed so it can return to the menu
+    if (mainWindow) {
+      mainWindow.webContents.send('desktop:closed-remotely');
+    }
+  };
+  
+  globalShortcut.register('Home', closeStream);
+  globalShortcut.register('BrowserHome', closeStream);
+  globalShortcut.register('Escape', closeStream);
 
   // Launch in app mode (no top bar) but without immediate fullscreen
   // Added flags to prevent redirects and automation detection
@@ -57,6 +77,7 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) 
     '--no-default-browser-check',
     '--disable-blink-features=AutomationControlled',
     '--password-store=basic', // Avoid some auth prompts
+    '--remote-debugging-port=9222', // Enable debug port for puppeteer
   ];
 
   if (userAgent) {
@@ -86,15 +107,25 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) 
         const domain = urlObj.hostname.replace('www.', '');
         
         const psCommand = `
+          $code = @'
+          using System;
+          using System.Runtime.InteropServices;
+          public class Win32 {
+            [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+            [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+          }
+'@;
+          Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue;
           $wshell = New-Object -ComObject WScript.Shell;
           $app = Get-Process | Where-Object {$_.MainWindowTitle -like "*${domain}*"} | Select-Object -First 1;
           if ($app) {
             try {
-              $wshell.AppActivate($app.Id);
-              Start-Sleep -Seconds 1;
+              [Win32]::ShowWindowAsync($app.MainWindowHandle, 3) | Out-Null;
+              [Win32]::SetForegroundWindow($app.MainWindowHandle) | Out-Null;
+              Start-Sleep -Milliseconds 500;
               $wshell.SendKeys('{F11}');
             } catch {
-              Write-Error "Failed to activate or send keys: $_";
+              Write-Error "Failed to activate or maximize: $_";
             }
           } else {
             Write-Warning "No window found with title containing '${domain}'";
@@ -121,6 +152,122 @@ ipcMain.handle('desktop:validate-path', async (event, browserPath) => {
 ipcMain.handle('desktop:close', async () => {
   killCurrentBrowser();
   return { success: true };
+});
+
+ipcMain.handle('desktop:auto-play', async (event, { targetText, apiKey }) => {
+  log(`Auto-play requested for: ${targetText}`);
+  try {
+    if (!apiKey) throw new Error("Gemini API Key missing");
+
+    // Connect to existing browser
+    const browser = await puppeteer.connect({
+      browserURL: 'http://127.0.0.1:9222',
+      defaultViewport: null
+    });
+    
+    // Get the page we just opened
+    const pages = await browser.pages();
+    const page = pages.find(p => !p.url().includes('devtools://')) || pages[0];
+    
+    if (!page) throw new Error("No page found to inspect.");
+
+    // Wait for the page's components and network to visually settle
+    try {
+      log("Waiting for page DOM to settle...");
+      await page.waitForFunction('document.readyState === "complete"', { timeout: 10000 });
+      await page.waitForNetworkIdle({ idleTime: 1000, timeout: 10000 });
+      
+      // Inject script to wait until the DOM stops mutating (simulating waiting for connectedCallbacks/framework renders)
+      await page.evaluate(() => {
+        return new Promise(resolve => {
+          let maxWaitTimeout = setTimeout(resolve, 10000); // 10 second absolute max wait
+          
+          let idleTimeout = setTimeout(() => {
+            clearTimeout(maxWaitTimeout);
+            resolve();
+          }, 1500);
+          
+          const observer = new MutationObserver(() => {
+            clearTimeout(idleTimeout);
+            idleTimeout = setTimeout(() => {
+              clearTimeout(maxWaitTimeout);
+              resolve();
+            }, 1500); // 1.5s of no DOM mutations
+          });
+          observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+        });
+      });
+      log("Page DOM has settled");
+    } catch (e) {
+      log(`Timeout waiting for page to settle (proceeding anyway): ${e.message}`);
+    }
+
+    // Capture screenshot
+    const screenshotBuffer = await page.screenshot({ encoding: 'base64' });
+
+    // Build REST request to Gemini for coordinates
+    const modelName = "gemini-3.1-flash-lite-preview"; // or full flash if needed
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    
+    const prompt = `Return ONLY a raw JSON object with { "x": number, "y": number } representing the exact pixel coordinates to click on the "${targetText}" on this screen. If it is not found, return { "error": "not found" }. Do NOT use markdown blocks.`;
+
+    const payload = JSON.stringify({
+      contents: [{ 
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: "image/png", data: screenshotBuffer } }
+        ] 
+      }]
+    });
+
+    const options = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 30000,
+      rejectUnauthorized: false
+    };
+
+    const responseText = await new Promise((resolve, reject) => {
+      const req = https.request(url, options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          if (res.statusCode !== 200) reject(new Error(`API Error: ${body}`));
+          else resolve(body);
+        });
+      });
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
+
+    const jsonResponse = JSON.parse(responseText);
+    const textOutput = jsonResponse.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const cleanedText = textOutput.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    log(`Gemini Vision response: ${cleanedText}`);
+
+    let coords;
+    try {
+      coords = JSON.parse(cleanedText);
+    } catch (e) {
+      throw new Error(`Failed to parse AI coordinates: ${cleanedText}`);
+    }
+
+    if (coords.error || typeof coords.x !== 'number') {
+      throw new Error(`Target not found by AI: ${coords.error || 'Invalid format'}`);
+    }
+
+    // Click the coordinates
+    await page.mouse.click(coords.x, coords.y);
+    browser.disconnect();
+
+    return { success: true, coords };
+
+  } catch (error) {
+    log(`Auto-play error: ${error.message}`);
+    throw error;
+  }
 });
 
 ipcMain.handle('settings:get', async () => {

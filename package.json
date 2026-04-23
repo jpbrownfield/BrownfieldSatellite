@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "electron:dev": "vite build && electron .",
-    "build:exe": "vite build && electron-builder",
+    "build:exe": "vite build && set CSC_IDENTITY_AUTO_DISCOVERY=false&& electron-builder",
     "lint": "tsc --noEmit"
   },
   "build": {
