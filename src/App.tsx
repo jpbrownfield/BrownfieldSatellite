@@ -188,7 +188,10 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full bg-neutral-950 text-white overflow-hidden font-sans">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={(tab) => {
+        setActiveTab(tab);
+        setFeatured(null); // Clear featured item to return to "the mall" if clicking same tab
+      }} />
       
       <main id="main-content" className={`flex-1 relative ${featured ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         {loading ? (

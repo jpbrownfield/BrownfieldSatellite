@@ -44,7 +44,6 @@ const killCurrentBrowser = () => {
   }
   // Unregister the shortcuts so normal keyboard behavior returns
   globalShortcut.unregister('Home');
-  globalShortcut.unregister('BrowserHome');
   globalShortcut.unregister('Escape');
 };
 
@@ -65,7 +64,6 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) 
   };
   
   globalShortcut.register('Home', closeStream);
-  globalShortcut.register('BrowserHome', closeStream);
   globalShortcut.register('Escape', closeStream);
 
   // Launch in app mode (no top bar) but without immediate fullscreen
@@ -131,7 +129,10 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) 
             Write-Warning "No window found with title containing '${domain}'";
           }
         `;
-        exec(`powershell -Command "${psCommand.replace(/\n/g, ' ')}"`, (err) => {
+        
+        // Encode the PowerShell command to Base64 to avoid all newline and escaping errors
+        const base64Cmd = Buffer.from(psCommand, 'utf16le').toString('base64');
+        exec(`powershell -EncodedCommand ${base64Cmd}`, (err) => {
           if (err) log(`PowerShell error: ${err.message}`);
         });
       } catch (e) {
