@@ -3,7 +3,11 @@ const path = require('path');
 const { exec } = require('child_process');
 const fs = require('fs');
 const https = require('https');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+
+// Use stealth plugin to avoid detection
+puppeteer.use(StealthPlugin());
 
 const logFile = path.join(app.getPath('userData'), 'launcher-debug.log');
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'app-settings.json');
@@ -73,7 +77,6 @@ ipcMain.handle('desktop:launch', async (event, { browserPath, url, userAgent }) 
     '--start-maximized',
     '--no-first-run',
     '--no-default-browser-check',
-    '--disable-blink-features=AutomationControlled',
     '--password-store=basic', // Avoid some auth prompts
     '--remote-debugging-port=9222', // Enable debug port for puppeteer
   ];
