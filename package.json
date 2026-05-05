@@ -2,37 +2,26 @@
   "name": "react-example",
   "private": true,
   "version": "1.0.0",
+  "description": "Brownfield Satellite",
+  "author": "Jon Brownfield Jr.",
   "type": "module",
-  "main": "electron-main.cjs",
+  "main": "http://localhost:5173",
+  "node-remote": "<all_urls>",
+  "user-agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36 SmartTV/8.3.0 (V8.3.0-22)",
+  "chromium-args": "--remote-debugging-port=9222 --remote-allow-origins=* --disable-blink-features=AutomationControlled --log-level=3",
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "title": "Brownfield Satellite"
+  },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"vite --port 5173\" \"wait-on http://localhost:5173 && nw .\"",
     "build": "vite build",
-    "electron:dev": "vite build && electron .",
-    "build:exe": "taskkill /f /im \"Brownfield Satellite.exe\" >nul 2>nul & vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
+    "build:exe": "node scripts/build-nw.js",
     "lint": "tsc --noEmit"
   },
-  "build": {
-    "appId": "com.brownfield.satellite",
-    "productName": "Brownfield Satellite",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron-main.cjs",
-      "preload.js",
-      "package.json",
-      ".env",
-      "loading.html"
-    ],
-    "win": {
-      "target": "portable",
-      "icon": "dist/favicon.ico",
-      "verifyUpdateCodeSignature": false
-    }
-  },
   "dependencies": {
-    "@google/genai": "^1.45.0",
+    "@emotion/is-prop-valid": "^1.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/express": "^5.0.6",
     "@vitejs/plugin-react": "^5.0.4",
@@ -49,14 +38,19 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/nw.js": "^0.92.0",
     "autoprefixer": "^10.4.21",
-    "cross-env": "^10.1.0",
-    "electron": "^41.0.2",
-    "electron-builder": "^26.8.1",
+    "concurrently": "^9.2.1",
     "gh-pages": "^6.3.0",
+    "happy-dom": "^20.9.0",
+    "nw": "^0.111.0",
+    "nw-builder": "^4.17.9",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.1",
     "typescript": "~5.8.2",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vite-plugin-static-copy": "^4.1.0",
+    "vitest": "^4.1.5",
+    "wait-on": "^9.0.5"
   }
 }

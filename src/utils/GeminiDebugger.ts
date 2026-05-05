@@ -13,7 +13,7 @@ export class GeminiDebugger {
       const settings = await getSettings();
       const apiKey = settings.geminiApiKey;
       
-      console.log(`Environment: ${bridge.isElectron ? 'Electron' : 'Browser Preview'}`);
+      console.log(`Environment: ${bridge.isNW ? 'Electron' : 'Browser Preview'}`);
       console.log(`API Key configured: ${apiKey ? 'Yes' : 'No'}`);
       if (apiKey) {
         console.log(`API Key Length: ${apiKey.length}`);

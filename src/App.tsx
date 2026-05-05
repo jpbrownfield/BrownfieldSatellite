@@ -98,10 +98,11 @@ export default function App() {
       const settings = await getSettings();
       try {
         const [m, t, liveSports] = await Promise.all([
-          getTrendingMovies().catch(() => []), 
-          getTrendingTv().catch(() => []), 
-          getLiveSportsEvents().catch(() => [])
+          getTrendingMovies().catch((e) => { console.error('movie error', e); return [] }), 
+          getTrendingTv().catch((e) => { console.error('tv error', e); return [] }), 
+          getLiveSportsEvents().catch((e) => { console.error('sports error', e); return [] })
         ]);
+        console.log('App Loaded Data', m.length, t.length, liveSports?.length);
         setMovies(m);
         setTvShows(t);
         

@@ -7,3 +7,7 @@ coverage/
 .env*
 !.env.example
 release/
+cache/
+src/utils/bridge.ts
+temp/
+automation/__pycache__/

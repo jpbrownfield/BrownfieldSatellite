@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Play, Info, Star, ArrowLeft, Loader2, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MediaItem, StreamingService, Season, Episode } from '../types';
-import { findDirectSportsLink, findDirectMediaLink, findDirectEpisodeLink } from '../services/deepLinkService';
 import { getTvEpisodes } from '../services/tmdbService';
 
 interface HeroProps {
@@ -15,8 +14,6 @@ interface HeroProps {
 
 export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }: HeroProps) {
   const backButtonRef = useRef<HTMLButtonElement>(null);
-  const [directLink, setDirectLink] = useState<{ service: string, url: string } | null>(null);
-  const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found' | 'error'>('idle');
   
   // TV Show specific state
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
@@ -35,35 +32,6 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
     };
 
     window.addEventListener('keydown', handleKeyDown);
-
-    // Initial search for direct link (Movie or Show main page)
-    if (item.type === 'live' && item.league) {
-      setSearchStatus('searching');
-      setDirectLink(null);
-      findDirectSportsLink(item.title, item.league).then(link => {
-        if (link) {
-          setDirectLink({ service: item.league === 'MLS' ? 'Apple TV' : 'DirecTV', url: link });
-          setSearchStatus('found');
-        } else {
-          setSearchStatus('not_found');
-        }
-      }).catch(() => {
-        setSearchStatus('error');
-      });
-    } else if (item.type === 'movie' || item.type === 'tv') {
-      setSearchStatus('searching');
-      setDirectLink(null);
-      findDirectMediaLink(item.title, item.type, item.year).then(link => {
-        if (link) {
-          setDirectLink(link);
-          setSearchStatus('found');
-        } else {
-          setSearchStatus('not_found');
-        }
-      }).catch(() => {
-        setSearchStatus('error');
-      });
-    }
 
     // If it's a TV show, pre-select the first season
     if (item.type === 'tv' && item.seasons && item.seasons.length > 0) {
@@ -89,28 +57,6 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
 
   const handleEpisodeSelect = async (episode: Episode) => {
     setSelectedEpisode(episode);
-    setSearchStatus('searching');
-    setDirectLink(null);
-    
-    try {
-      const link = await findDirectEpisodeLink(
-        item.title, 
-        selectedSeason?.seasonNumber || 1, 
-        episode.episodeNumber, 
-        episode.name,
-        item.year
-      );
-      
-      if (link) {
-        setDirectLink(link);
-        setSearchStatus('found');
-        // Automatically play if found? Maybe not, let user click "Watch"
-      } else {
-        setSearchStatus('not_found');
-      }
-    } catch (e) {
-      setSearchStatus('error');
-    }
   };
 
   return (
@@ -228,53 +174,25 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
         )}
         
         <div className="flex flex-wrap gap-4">
-          {searchStatus === 'searching' && (
-            <div className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold animate-pulse">
-              <Loader2 size={20} className="animate-spin" />
-              {selectedEpisode ? `Finding Episode ${selectedEpisode.episodeNumber} link...` : 'Finding direct link...'}
-            </div>
-          )}
-
-          {searchStatus === 'found' && directLink && (
-            <button
-              onClick={() => onPlay({ name: directLink.service, url: directLink.url })}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-full font-bold hover:bg-blue-500 focus:ring-4 focus:ring-white/50 focus:scale-105 outline-none transition-all shadow-lg shadow-blue-600/20"
-            >
-              <Play size={20} className="fill-current" />
-              {selectedEpisode ? `Watch S${selectedSeason?.seasonNumber}E${selectedEpisode.episodeNumber} on ${directLink.service}` : `Watch Direct on ${directLink.service}`}
-            </button>
-          )}
-
-          {searchStatus === 'not_found' && (
-            <div className="flex items-center gap-2 px-6 py-3 bg-neutral-900 border border-neutral-800 text-neutral-500 rounded-full font-semibold">
-              <X size={20} />
-              No Direct Link Found
-            </div>
-          )}
-
-          {searchStatus === 'error' && (
-            <div className="flex items-center gap-2 px-6 py-3 bg-red-900/20 border border-red-900/50 text-red-400 rounded-full font-semibold">
-              <X size={20} />
-              Search Error
-            </div>
-          )}
-
           {item.services.length > 0 ? (
             item.services.map((service, idx) => (
               <button
                 key={idx}
                 onClick={() => onPlay(service)}
                 className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold outline-none transition-all ${
-                  idx === 0 && searchStatus !== 'found' && searchStatus !== 'searching'
+                  idx === 0
                     ? 'bg-white text-black hover:bg-neutral-200 focus:bg-neutral-200 focus:ring-4 focus:ring-white/50 focus:scale-105'
                     : 'bg-neutral-800/80 backdrop-blur-md text-white hover:bg-neutral-700 focus:bg-neutral-700 focus:ring-4 focus:ring-white/50 focus:scale-105'
                 }`}
               >
                 <Play size={20} className="fill-current" />
-                {service.url.includes('search') ? `Search on ${service.name}` : `Watch on ${service.name}`}
+                {selectedEpisode 
+                  ? `Watch S${selectedSeason?.seasonNumber}E${selectedEpisode.episodeNumber} on ${service.name}`
+                  : `Watch on ${service.name}`
+                }
               </button>
             ))
-          ) : searchStatus !== 'searching' && searchStatus !== 'found' && (
+          ) : (
             <button disabled className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold cursor-not-allowed">
               Not available to stream
             </button>

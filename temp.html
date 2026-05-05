@@ -1,0 +1,18 @@
+
+<!DOCTYPE html>
+<html>
+<body>
+  <script>
+    const fs = require('fs');
+    try {
+      const p = require('path');
+      console.log("REQUIRE WORKED");
+      console.log("DATA PATH:", nw.App.dataPath);
+      fs.writeFileSync('nw-debug.log', "SUCCESS: " + nw.App.dataPath);
+    } catch(e) {
+      fs.writeFileSync('nw-debug.log', "ERROR: " + e.message);
+    }
+    nw.App.quit();
+  </script>
+</body>
+</html>

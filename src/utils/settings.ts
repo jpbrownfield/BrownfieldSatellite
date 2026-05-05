@@ -7,6 +7,9 @@ export interface AppSettings {
   userAgent: string;
   tmdbApiKey: string;
   geminiApiKey: string;
+  enableDomSearch: boolean;
+  enableGeminiSearch: boolean;
+  enableOpenCvSearch: boolean;
 }
 
 const DEFAULT_SERVICES = ['netflix', 'max', 'amazon', 'hulu', 'disney', 'apple', 'paramount', 'peacock', 'directv'];
@@ -30,6 +33,9 @@ export async function getSettings(): Promise<AppSettings> {
       userAgent: settings.userAgent || DEFAULT_USER_AGENT,
       tmdbApiKey: settings.tmdbApiKey || DEFAULT_TMDB_KEY,
       geminiApiKey: settings.geminiApiKey || process.env.GEMINI_API_KEY || '',
+      enableDomSearch: settings.enableDomSearch ?? true,
+      enableGeminiSearch: settings.enableGeminiSearch ?? true,
+      enableOpenCvSearch: settings.enableOpenCvSearch ?? true,
     };
     
     cachedSettings = merged;

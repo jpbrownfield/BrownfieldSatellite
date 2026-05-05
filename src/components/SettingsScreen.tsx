@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Globe, Trash2, RefreshCw, Monitor, Shield, ExternalLink, Key, FileText, Terminal, Puzzle, ShoppingBag } from 'lucide-react';
+import { Check, Globe, Trash2, RefreshCw, Monitor, Shield, ExternalLink, Key, FileText, Terminal, Puzzle, ShoppingBag, MonitorPlay } from 'lucide-react';
 import { bridge } from '../utils/bridge';
 import { getSettings, saveSettings, AppSettings } from '../utils/settings';
 import { clearCache } from '../services/tmdbService';
@@ -73,6 +73,29 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
 
   const [isTestingGemini, setIsTestingGemini] = useState(false);
   const [geminiTestResult, setGeminiTestResult] = useState<{success: boolean, message: string} | null>(null);
+  
+  const [isTestingTmdb, setIsTestingTmdb] = useState(false);
+  const [tmdbTestResult, setTmdbTestResult] = useState<{success: boolean, message: string} | null>(null);
+
+  const testTmdb = async () => {
+    if (!settings) return;
+    setIsTestingTmdb(true);
+    setTmdbTestResult(null);
+    try {
+      const res = await fetch(`https://api.themoviedb.org/3/authentication?api_key=${settings.tmdbApiKey}`);
+      const data = await res.json();
+      if (data.success) {
+        setTmdbTestResult({ success: true, message: "Valid API Key!" });
+      } else {
+        setTmdbTestResult({ success: false, message: data.status_message || "Invalid API Key" });
+      }
+    } catch (e: any) {
+      console.error('TMDB Test Failed:', e);
+      setTmdbTestResult({ success: false, message: e.message || "Network error occurred." });
+    } finally {
+      setIsTestingTmdb(false);
+    }
+  };
 
   const testGemini = async () => {
     if (!settings) return;
@@ -166,6 +189,26 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
               onChange={(e) => handleSave({ ...settings, tmdbApiKey: e.target.value })}
               className="w-full bg-black border border-neutral-800 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-neutral-600 transition-all font-mono text-sm"
             />
+            <div className="mt-4 flex items-center gap-4">
+              <button 
+                onClick={testTmdb}
+                disabled={isTestingTmdb}
+                className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {isTestingTmdb ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Test TMDB
+              </button>
+              {tmdbTestResult && (
+                <span className={`text-sm font-medium ${tmdbTestResult.success ? 'text-green-500' : 'text-red-500'}`}>
+                  {tmdbTestResult.success ? 'Success!' : tmdbTestResult.message}
+                </span>
+              )}
+            </div>
+            {tmdbTestResult?.success && (
+              <div className="mt-2 p-3 bg-neutral-800/50 rounded-lg text-xs text-neutral-300 font-mono">
+                {tmdbTestResult.message}
+              </div>
+            )}
             <p className="mt-2 text-xs text-neutral-500">Get your key from themoviedb.org settings.</p>
           </div>
 
@@ -256,6 +299,58 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
             <p className="mt-3 text-xs text-neutral-500">
               Spoofing a Smart TV user agent can sometimes trigger remote-friendly UIs, but may also break some sites.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Automation Overrides Section */}
+      <section className="mb-12">
+        <div className="flex items-center gap-3 mb-6">
+          <MonitorPlay className="text-neutral-400" size={24} />
+          <h2 className="text-2xl font-semibold">AI & Automation Engine</h2>
+        </div>
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-8 space-y-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">Standard DOM Automation</h3>
+              <p className="text-neutral-400 text-sm max-w-lg">Continuously searches the invisible webpage code for exact button matches while watching. Extremely fast, but breaks if sites disguise their text.</p>
+            </div>
+            <button
+              onClick={() => handleSave({ ...settings, enableDomSearch: !settings.enableDomSearch })}
+              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none ${settings.enableDomSearch ? 'bg-green-500' : 'bg-neutral-700'}`}
+            >
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.enableDomSearch ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div className="h-px bg-neutral-800" />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">OpenCV Local Feature Matching</h3>
+              <p className="text-neutral-400 text-sm max-w-lg">Uses local computer vision to scan screenshots for the movie poster/cover art. Instant and offline, but won't work for word buttons like "Play".</p>
+            </div>
+            <button
+              onClick={() => handleSave({ ...settings, enableOpenCvSearch: !settings.enableOpenCvSearch })}
+              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none ${settings.enableOpenCvSearch ? 'bg-purple-500' : 'bg-neutral-700'}`}
+            >
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.enableOpenCvSearch ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div className="h-px bg-neutral-800" />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white mb-1">Gemini Vision AI Automation</h3>
+              <p className="text-neutral-400 text-sm max-w-lg">Takes screenshots of the stream window and uses AI to physically click the right buttons on the screen. Required for tricky sites, but slower.</p>
+            </div>
+            <button
+              onClick={() => handleSave({ ...settings, enableGeminiSearch: !settings.enableGeminiSearch })}
+              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none ${settings.enableGeminiSearch ? 'bg-blue-600' : 'bg-neutral-700'}`}
+            >
+              <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${settings.enableGeminiSearch ? 'translate-x-7' : 'translate-x-1'}`} />
+            </button>
           </div>
         </div>
       </section>
@@ -359,27 +454,37 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
         </div>
 
         <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl p-6">
-          <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Recommended for Streaming</h3>
-          <div className="space-y-4">
-            {[
-              { name: 'uBlock Origin', desc: 'The best ad and tracker blocker.', url: 'https://chrome.google.com/webstore/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm' },
-              { name: 'Video Speed Controller', desc: 'Speed up or slow down any HTML5 video.', url: 'https://chrome.google.com/webstore/detail/video-speed-controller/nffaoalbilbmmfgbnbgppihopmeabclm' },
-              { name: 'Netflix 1080p', desc: 'Force 1080p playback on Netflix.', url: 'https://chrome.google.com/webstore/detail/netflix-1080p/jbeiccbachgeoceeonhlbbbaacknbckn' }
-            ].map((ext, i) => (
-              <div key={i} className="flex items-center justify-between py-3 border-b border-neutral-800 last:border-0">
-                <div>
-                  <div className="font-bold">{ext.name}</div>
-                  <div className="text-xs text-neutral-500">{ext.desc}</div>
-                </div>
-                <button 
-                  onClick={() => handleLaunchExtensionManager(ext.url)}
-                  className="p-2 text-neutral-400 hover:text-white transition-colors"
-                  title="Install"
-                >
-                  <ExternalLink size={18} />
-                </button>
-              </div>
-            ))}
+          <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Extensions Backup & Import</h3>
+          <p className="text-sm text-neutral-400 mb-4">Export unpacked extensions to a portable folder, or import a previously bundled folder.</p>
+          <div className="flex flex-col md:flex-row gap-4">
+            <button 
+              onClick={async () => {
+                try {
+                  await bridge.invoke('extensions:backup');
+                  alert('Extensions backed up to [App Path]/exported-extensions! You can bundle this folder.');
+                } catch (e) {
+                  alert('Backup failed. Check logs.');
+                }
+              }}
+              className="flex-1 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <Puzzle size={16} />
+              Export Extensions
+            </button>
+            <button 
+               onClick={async () => {
+                try {
+                  await bridge.invoke('extensions:import');
+                  alert('Extensions imported successfully onto your active browser profile!');
+                } catch (e) {
+                  alert('Import failed. Make sure exported-extensions folder exists next to the exe.');
+                }
+              }}
+              className="flex-1 py-3 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <Puzzle size={16} />
+              Import Bundled Extensions
+            </button>
           </div>
         </div>
       </section>
@@ -411,7 +516,7 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Terminal className="text-neutral-400" size={24} />
-            <h2 className="text-2xl font-semibold">Server Logs</h2>
+            <h2 className="text-2xl font-semibold">Debug Logs</h2>
           </div>
           <button 
             onClick={fetchLogs}
@@ -425,7 +530,7 @@ export default function SettingsScreen({ onSettingsChange }: SettingsScreenProps
         <div className="bg-black border border-neutral-800 rounded-2xl p-6 font-mono text-xs overflow-hidden">
           <div className="flex items-center gap-2 mb-4 text-neutral-500 border-b border-neutral-800 pb-2">
             <FileText size={14} />
-            <span>server-debug.log</span>
+            <span>nw-debug.log</span>
           </div>
           <div className="max-h-64 overflow-y-auto space-y-1 custom-scrollbar">
             {logs ? (

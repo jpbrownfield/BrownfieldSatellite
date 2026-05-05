@@ -16,15 +16,20 @@ export default function Player({ item, service, onClose }: PlayerProps) {
   const [isLaunching, setIsLaunching] = useState(true);
   const remoteWindowRef = React.useRef<Window | null>(null);
 
+  const hasLaunched = React.useRef(false);
+
   // Cleanup remote window and handle remote-control closes on unmount/mount
   React.useEffect(() => {
+    if (hasLaunched.current) return;
+    hasLaunched.current = true;
+
     // Listen for the remote shortcut to close the video remotely from the couch
     const handleRemoteClose = () => {
       console.log("Stream closed via remote shortcut.");
       onClose();
     };
 
-    if (bridge.isElectron) {
+    if (bridge.isNW) {
       bridge.on('desktop:closed-remotely', handleRemoteClose);
     }
 
@@ -33,7 +38,7 @@ export default function Player({ item, service, onClose }: PlayerProps) {
       if (remoteWindowRef.current && !remoteWindowRef.current.closed) {
         remoteWindowRef.current.close();
       }
-      if (bridge.isElectron) {
+      if (bridge.isNW) {
         bridge.removeListener('desktop:closed-remotely', handleRemoteClose);
       }
     };
@@ -64,19 +69,23 @@ export default function Player({ item, service, onClose }: PlayerProps) {
         console.log("Launch successful");
         setIsRemoteMode(true);
         
-        if (settings.apiKey) {
+        if (settings.geminiApiKey) {
           console.log("Attempting AI Auto-Play. Waiting for page to visually settle...");
           try {
             setIsLaunching(true);
             
-            // 1. First pass: find the show logo
-            // (The desktop:auto-play backend handles waiting for network/DOM mutations)
-            await bridge.invoke('desktop:auto-play', { targetText: `the logo or cover for ${item.title}`, apiKey: settings.apiKey });
-            console.log("First pass clicked show, evaluating second pass...");
-            
-            // 2. Second pass: find the play button (wait for modal/page transition)
-            await bridge.invoke('desktop:auto-play', { targetText: "the primary 'Play', 'Watch', or episode button", apiKey: settings.apiKey });
-            console.log("Auto-Play completed!");
+            // Unified Auto-Play sequence
+            await bridge.invoke('desktop:auto-play', { 
+              targetText: item.title,
+              mediaType: item.type,
+              visionPrompt: `Navigate to and play ${item.title}`, 
+              referenceUrl: item.backdropUrl || item.posterUrl,
+              apiKey: settings.geminiApiKey,
+              enableDomSearch: false, // Disabling concurrent fallback clickers to avoid interfering with Gemini's complex multi-step navigation
+              enableGeminiSearch: true,
+              enableOpenCvSearch: false
+            });
+            console.log("Auto-Play sequence fully completed!");
             
           } catch (aiErr: any) {
             console.error("Auto-Play failed (but stream is open):", aiErr);
@@ -88,7 +97,7 @@ export default function Player({ item, service, onClose }: PlayerProps) {
     } catch (err: any) {
       console.error("Desktop launch failed", err);
       // Fallback to popup if not in Electron
-      if (!bridge.isElectron) {
+      if (!bridge.isNW) {
         const width = window.screen.availWidth;
         const height = window.screen.availHeight;
         const left = 0;
