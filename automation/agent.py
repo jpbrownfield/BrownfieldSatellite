@@ -85,6 +85,16 @@ class MediaAutomator:
                 except Exception as e:
                     log(f"Warning: domcontentloaded timeout: {e}")
 
+                try:
+                    # Hide scrollbars and disable ALL animations/transitions to radically speed up state changes
+                    css_injection = """
+                        ::-webkit-scrollbar { display: none !important; } 
+                        * { scrollbar-width: none !important; transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+                    """
+                    await page.add_style_tag(content=css_injection)
+                except Exception as e:
+                    log(f"Warning: Failed to inject speedup CSS: {e}")
+
                 log(f"Starting continuous Scan Loop for '{target_text}'...")
                 
                 js_locator_script = """(text) => {
@@ -102,32 +112,17 @@ class MediaAutomator:
                 stop_event = asyncio.Event()
                 result_data = {}
                 
-                # Fetch Reference URLs Once
+                # Fetch Reference URLs Once (Disabled)
                 ref_bytes_list = []
-                if reference_urls and (enable_opencv or enable_gemini):
-                    try:
-                        import urllib.request
-                        def fetch_imgs():
-                            imgs = []
-                            for url in reference_urls:
-                                try:
-                                    log(f"Fetching Context Reference Image: {url}")
-                                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                                    with urllib.request.urlopen(req, timeout=5) as response:
-                                        imgs.append(response.read())
-                                except Exception as e:
-                                    log(f"Warning: Failed to fetch reference image: {url} - {e}")
-                            return imgs
-                        ref_bytes_list = await asyncio.to_thread(fetch_imgs)
-                    except Exception as e:
-                        log(f"Warning: Failed to fetch reference images early: {e}")
-
+                
                 tasks = []
 
                 active_gemini_tasks = []
+                last_click_time = [0.0]
 
                 def perform_click(x, y, method):
                     if not stop_event.is_set():
+                        last_click_time[0] = time.time()
                         log(f"{method} match found at {x}, {y}. Clicking...")
                         pyautogui.moveTo(x, y, duration=0.2)
                         time.sleep(0.3)
@@ -163,7 +158,8 @@ class MediaAutomator:
                     log("OpenCV worker starting continuous pattern matching...")
                     while not stop_event.is_set():
                         try:
-                            screenshot_bytes = await page.screenshot()
+                            # Use JPEG instead of PNG to slash screenshot transit/compression time
+                            screenshot_bytes = await page.screenshot(type="jpeg", quality=65)
                             for ref_bytes in ref_bytes_list:
                                 if stop_event.is_set(): break
                                 coords = await asyncio.to_thread(self.opencv_fallback, screenshot_bytes, ref_bytes)
@@ -177,7 +173,7 @@ class MediaAutomator:
                 async def gemini_worker():
                     await asyncio.sleep(1.0)
                     attempt = 1
-                    last_screen_arr = None
+                    latest_state = {"screen_arr": None}
                     
                     def compute_ssim(i1, i2):
                         C1 = 6.5025
@@ -201,19 +197,43 @@ class MediaAutomator:
                         ssim_map = (t1 * t2) / (t3 * t4)
                         return cv2.mean(ssim_map)[0]
                     
-                    async def fire_gemini_call(ss_bytes, vp, rcts, ref_list, get_attempt):
+                    async def fire_gemini_call(ss_bytes, vp, rcts, ref_list, get_attempt, orig_screen_img):
                         log(f"Triggering Gemini Vision API (Attempt {get_attempt})...")
                         try:
                             # Note: target_text contains the program name/art if it's the first pass, else "play"
                             program_name = vision_target if vision_target.lower() != "play" else "the selected content"
                             
                             coords = await asyncio.to_thread(self.gemini_fallback, ss_bytes, program_name, vp, rcts, ref_list, media_type, description)
+                            
+                            # Prevent race condition: if another instance already triggered an action,
+                            # the active_gemini_tasks array will have been cleared.
+                            if asyncio.current_task() not in active_gemini_tasks:
+                                log(f"Gemini API Attempt {get_attempt} aborted: A parallel task already completed an action.")
+                                return
+
+                            # Snapshot validation: Make sure the screen hasn't changed dramatically while Gemini was thinking
+                            try:
+                                cur_img = latest_state["screen_arr"]
+                                if cur_img is None:
+                                    log(f"Gemini API Attempt {get_attempt} click aborted: No latest screen array available.")
+                                    return
+
+                                ssim_val = compute_ssim(cur_img, orig_screen_img)
+                                if ssim_val < 0.95:
+                                    log(f"Gemini API Attempt {get_attempt} click aborted: UI state changed radically since request (SSIM {ssim_val:.2f})")
+                                    return
+                            except Exception as ss_e:
+                                log(f"Validation SSIM check failed, skipping: {ss_e}")
+
                             if coords:
                                 if coords.get("action") == "click" and coords.get("x") is not None:
                                     perform_click(coords['x'], coords['y'], "Gemini")
                                 elif coords.get("action") == "complete":
                                     if not stop_event.is_set():
                                         log("Gemini identified video playback is active. Ending sequence.")
+                                        for t in active_gemini_tasks:
+                                            t.cancel()
+                                        active_gemini_tasks.clear()
                                         result_data["result"] = {"success": True, "method": "Gemini-Complete", "action": "complete"}
                                         stop_event.set()
                         except Exception as e:
@@ -235,35 +255,50 @@ class MediaAutomator:
                                     } catch (e) {}
                                     return false;
                                 });
+                                // Build candidate objects and sort them by area ascending. 
+                                // This ensures small, specific target elements (like a movie poster img) are processed and added FIRST.
+                                // When the massive parent container (like the gallery div) is processed later, it overlaps the child by >80% of the child's area, so the huge parent gets marked as a duplicate and tossed out.
+                                const candidates = elements.map(el => {
+                                    const r = el.getBoundingClientRect();
+                                    return { r, area: r.width * r.height };
+                                }).filter(cand => cand.r.width >= 10 && cand.r.height >= 10 && cand.r.top < window.innerHeight && cand.r.bottom > 0 && cand.r.left < window.innerWidth && cand.r.right > 0)
+                                  .sort((a, b) => a.area - b.area);
+
                                 let rects = [];
                                 let id_counter = 1;
-                                for (let el of elements) {
-                                    const r = el.getBoundingClientRect();
-                                    if (r.width >= 10 && r.height >= 10 && r.top < window.innerHeight && r.bottom > 0 && r.left < window.innerWidth && r.right > 0) {
-                                        // Calculate overlap to avoid double-boxing nested/identical elements (like an img inside a button)
-                                        let isDuplicate = false;
-                                        for (let existing of rects) {
-                                            const intersectX = Math.max(0, Math.min(existing.x + existing.w, r.x + r.width) - Math.max(existing.x, r.x));
-                                            const intersectY = Math.max(0, Math.min(existing.y + existing.h, r.y + r.height) - Math.max(existing.y, r.y));
-                                            const intersectArea = intersectX * intersectY;
-                                            const rArea = r.width * r.height;
-                                            const existingArea = existing.w * existing.h;
-                                            // If the bounds overlap by roughly 80% of either element's total space, skip the nested one
-                                            if (intersectArea / rArea > 0.8 || intersectArea / existingArea > 0.8) {
-                                                isDuplicate = true;
-                                                break;
-                                            }
+                                for (let cand of candidates) {
+                                    const r = cand.r;
+                                    // Calculate overlap to avoid double-boxing nested/identical elements (like an img inside a button)
+                                    let isDuplicate = false;
+                                    for (let existing of rects) {
+                                        const intersectX = Math.max(0, Math.min(existing.x + existing.w, r.x + r.width) - Math.max(existing.x, r.x));
+                                        const intersectY = Math.max(0, Math.min(existing.y + existing.h, r.y + r.height) - Math.max(existing.y, r.y));
+                                        const intersectArea = intersectX * intersectY;
+                                        const rArea = r.width * r.height;
+                                        const existingArea = existing.w * existing.h;
+                                        // If the bounds overlap by roughly 80% of either element's total space, skip the nested one
+                                        if (intersectArea / rArea > 0.8 || intersectArea / existingArea > 0.8) {
+                                            isDuplicate = true;
+                                            break;
                                         }
+                                    }
                                         
                                         if (!isDuplicate) {
+                                            const dpr = window.devicePixelRatio || 1;
+                                            const screenX = window.screenX || 0;
+                                            const screenY = window.screenY || 0;
+                                            const borderX = (window.outerWidth > window.innerWidth) ? (window.outerWidth - window.innerWidth) / 2 : 0;
+                                            const titleBarY = (window.outerHeight > window.innerHeight) ? (window.outerHeight - window.innerHeight - borderX) : 0;
+                                            
                                             rects.push({
                                                 id: id_counter++, 
                                                 x: r.x, y: r.y, 
                                                 w: r.width, h: r.height, 
-                                                cx: r.x + r.width/2, cy: r.y + r.height/2
+                                                cx: (screenX + borderX + r.x + r.width/2) * dpr, 
+                                                cy: (screenY + titleBarY + r.y + r.height/2) * dpr
                                             });
                                         }
-                                    }
+                                    // Removed the extra closing brace here
                                 }
                                 return {width: window.innerWidth, height: window.innerHeight, rects};
                             }"""
@@ -271,7 +306,8 @@ class MediaAutomator:
                             viewport = {"width": page_data["width"], "height": page_data["height"]}
                             rects = page_data["rects"]
                             
-                            screenshot_bytes = await page.screenshot()
+                            # Use JPEG instead of PNG to slash screenshot transit/compression time
+                            screenshot_bytes = await page.screenshot(type="jpeg", quality=65)
                             
                             # Screenshot similarity check (SSIM > 0.95 threshold)
                             skip_call = False
@@ -283,16 +319,16 @@ class MediaAutomator:
                             scale = min(640/w, 360/h)
                             screen_img = cv2.resize(raw_img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
                             
-                            if last_screen_arr is not None and screen_img.shape == last_screen_arr.shape:
-                                ssim_val = compute_ssim(screen_img, last_screen_arr)
+                            if latest_state["screen_arr"] is not None and screen_img.shape == latest_state["screen_arr"].shape:
+                                ssim_val = compute_ssim(screen_img, latest_state["screen_arr"])
                                 if ssim_val >= 0.95:
                                     log(f"Skipping Gemini call: Screenshot SSIM ({ssim_val:.2f}) >= 0.95 (visually identical)")
                                     skip_call = True
                                     
-                            last_screen_arr = screen_img
+                            latest_state["screen_arr"] = screen_img
 
                             if not skip_call:
-                                t = asyncio.create_task(fire_gemini_call(screenshot_bytes, viewport, rects, ref_bytes_list, attempt))
+                                t = asyncio.create_task(fire_gemini_call(screenshot_bytes, viewport, rects, ref_bytes_list, attempt, screen_img))
                                 tasks.append(t)
                                 active_gemini_tasks.append(t)
                                 attempt += 1
@@ -442,11 +478,14 @@ class MediaAutomator:
                     # Draw number plate
                     text = str(rect['id'])
                     font = cv2.FONT_HERSHEY_SIMPLEX
-                    font_scale = 0.5
-                    thickness = 1
+                    font_scale = 0.7
+                    thickness = 2
                     (text_w, text_h), _ = cv2.getTextSize(text, font, font_scale, thickness)
-                    # Draw filled rectangle for text background
-                    cv2.rectangle(img, (sx1, sy1 - text_h - 4), (sx1 + text_w + 4, sy1), color, -1)
+                    # Draw filled rectangle for text background (black interior)
+                    cv2.rectangle(img, (sx1, sy1 - text_h - 4), (sx1 + text_w + 4, sy1), (0, 0, 0), -1)
+                    # Draw border for the text background using the rainbow color
+                    cv2.rectangle(img, (sx1, sy1 - text_h - 4), (sx1 + text_w + 4, sy1), color, 1)
+                    # Draw bold white text
                     cv2.putText(img, text, (sx1 + 2, sy1 - 2), font, font_scale, (255, 255, 255), thickness)
 
             # Debug: Save last 3 grid screenshots to temp folder

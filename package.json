@@ -8,7 +8,7 @@
   "main": "http://localhost:5173",
   "node-remote": "<all_urls>",
   "user-agent": "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Safari/537.36 SmartTV/8.3.0 (V8.3.0-22)",
-  "chromium-args": "--remote-debugging-port=9222 --remote-allow-origins=* --disable-blink-features=AutomationControlled --log-level=3",
+  "chromium-args": "--remote-debugging-port=9222 --remote-allow-origins=* --disable-blink-features=AutomationControlled",
   "window": {
     "width": 1280,
     "height": 720,

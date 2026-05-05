@@ -218,7 +218,28 @@ export const bridge: Bridge = {
           // If we have a custom browser path (e.g. C:/Program Files/Google/Chrome/...) configured,
           // we use node's child_process to spawn THEIR real chrome. This means they are automatically
           // logged in, have their extensions, and NEVER get detected as a bot by Netflix.
-          if (browserPath && fs.existsSync(browserPath)) {
+          let finalBrowserPath = browserPath;
+          
+          if (!finalBrowserPath || finalBrowserPath.trim() === '') {
+            // Fetch playwright chromium path if empty
+            try {
+              let executable = 'python';
+              if (!fs.existsSync(path.join(process.cwd(), 'automation'))) {
+                 // In production packaged env
+                 executable = path.join(path.dirname(process.execPath), 'automation_env', 'python.exe');
+              }
+              const result = require('child_process').execSync(`"${executable}" -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()"`, { encoding: 'utf-8' });
+              const pwPath = result.trim();
+              if (fs.existsSync(pwPath)) {
+                finalBrowserPath = pwPath;
+                console.log('Resolved Playwright Chromium path:', finalBrowserPath);
+              }
+            } catch (e) {
+              console.error('Failed to resolve Playwright Chromium path', e);
+            }
+          }
+
+          if (finalBrowserPath && fs.existsSync(finalBrowserPath)) {
             return new Promise((resolve) => {
               if (activeStreamWindow) {
                 try { activeStreamWindow.kill(); } catch(e){}
@@ -248,7 +269,7 @@ export const bridge: Bridge = {
               // We launch their Chrome in "App Mode" (removes URL bar and tabs)
               // and "Start Fullscreen" so it looks exactly like our NW.js window.
               // Crucially, we open port 9222 ONLY on this specific instance so our Python agent can control it!
-              const chromeProcess = spawn(browserPath, [
+              const chromeProcess = spawn(finalBrowserPath, [
                 `--app=${url}`,
                 '--start-fullscreen',
                 '--kiosk', // Enforces absolute fullscreen without window borders
@@ -258,7 +279,9 @@ export const bridge: Bridge = {
                 '--disable-infobars',
                 '--hide-crash-restore-bubble',
                 `--user-data-dir=${profileDir}`,
-                '--disable-blink-features=AutomationControlled'
+                '--disable-blink-features=AutomationControlled',
+                '--enable-features=AllowLegacyMV2Extensions',
+                '--disable-features=ExtensionManifestV2Unsupported,ExtensionManifestV2Disabled'
               ], { detached: true }); // Detached so it survives if our app closes during launch
 
               chromeProcess.stdout?.on('data', (data: any) => {
@@ -422,8 +445,20 @@ let osRemoteProcess: any = null;
       case 'desktop:validate-path': {
         const { browserPath } = args[0];
         
-        if (!browserPath) {
-          return { exists: false, message: "Browser path is empty." };
+        if (!browserPath || browserPath.trim() === "") {
+           // Let's resolve the playwright chromium
+           try {
+              let executable = 'python';
+              if (!fs.existsSync(path.join(process.cwd(), 'automation'))) {
+                 executable = path.join(path.dirname(process.execPath), 'automation_env', 'python.exe');
+              }
+              const result = require('child_process').execSync(`"${executable}" -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()"`, { encoding: 'utf-8' });
+              const pwPath = result.trim();
+              if (fs.existsSync(pwPath)) {
+                return { exists: true, message: `Using embedded Playwright Chromium: ${path.basename(pwPath)}` };
+              }
+           } catch(e) {}
+           return { exists: false, message: "Browser path is empty and Playwright Chromium could not be located." };
         }
 
         if (fs.existsSync(browserPath)) {
