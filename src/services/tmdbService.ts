@@ -13,7 +13,8 @@ const SERVICE_MAPPING: Record<string, string> = {
   'disney': 'Disney+',
   'apple': 'Apple TV',
   'paramount': 'Paramount Plus',
-  'peacock': 'Peacock'
+  'peacock': 'Peacock',
+  'directv': 'DirecTV'
 };
 
 async function getCanonicalName(providerName: string): Promise<string | null> {
@@ -41,10 +42,11 @@ function getServiceUrl(canonicalName: string, title: string, tmdbLink: string): 
   if (name.includes('max')) return `https://play.max.com/search?q=${q}`;
   if (name.includes('amazon')) return `https://www.amazon.com/s?k=${q}&i=instant-video`;
   if (name.includes('hulu')) return `https://www.hulu.com/search?q=${q}`;
-  if (name.includes('disney')) return `https://www.disneyplus.com/search?q=${q}`;
+  if (name.includes('disney')) return `https://www.disneyplus.com/browse/search`;
   if (name.includes('apple')) return `https://tv.apple.com/search?term=${q}`;
   if (name.includes('paramount')) return `https://www.paramountplus.com/search/?q=${q}`;
   if (name.includes('peacock')) return `https://www.peacocktv.com/watch/search?q=${q}`;
+  if (name.includes('directv')) return `https://stream.directv.com/search`;
   
   return tmdbLink;
 }

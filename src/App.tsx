@@ -24,6 +24,7 @@ import SettingsScreen from './components/SettingsScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('mystuff');
+  const [voiceQuery, setVoiceQuery] = useState('');
   const [movies, setMovies] = useState<MediaItem[]>([]);
   const [tvShows, setTvShows] = useState<MediaItem[]>([]);
   const [sports, setSports] = useState<MediaItem[]>([]);
@@ -183,6 +184,22 @@ export default function App() {
     setPlaying(null);
   };
 
+  useEffect(() => {
+    const handleNavHome = () => {
+      setActiveTab('mystuff');
+    };
+    const handleVoiceSearch = (query: string) => {
+      setVoiceQuery(query);
+      setActiveTab('search');
+    };
+    bridge.on('desktop:nav-home', handleNavHome);
+    bridge.on('desktop:voice-search', handleVoiceSearch);
+    return () => {
+      bridge.removeListener('desktop:nav-home', handleNavHome);
+      bridge.removeListener('desktop:voice-search', handleVoiceSearch);
+    };
+  }, []);
+
   if (playing) {
     return <Player item={playing.item} service={playing.service} onClose={handleClosePlayer} />;
   }
@@ -244,7 +261,7 @@ export default function App() {
               )}
               
               {activeTab === 'search' && (
-                <SearchScreen onPlay={(item, service) => setPlaying({item, service})} myStuff={myStuff} onToggleStar={toggleStar} onSelect={setFeatured} />
+                <SearchScreen initialQuery={voiceQuery} onPlay={(item, service) => setPlaying({item, service})} myStuff={myStuff} onToggleStar={toggleStar} onSelect={setFeatured} />
               )}
 
               {activeTab === 'settings' && (

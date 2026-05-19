@@ -57,7 +57,7 @@ export async function getLiveSportsEvents(): Promise<MediaItem[]> {
           // Determine the streaming service based on the league
           const services = team.league === 'MLS' 
             ? [{ name: 'Apple TV (MLS Season Pass)', url: 'https://tv.apple.com/channel/tvs.sbd.7000' }]
-            : [{ name: 'DirecTV', url: `https://www.directv.com/search?q=${encodeURIComponent(searchQuery)}` }];
+            : [{ name: 'DirecTV', url: `https://stream.directv.com/search` }];
           
           return {
             id: `espn-${event.id}`,

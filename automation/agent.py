@@ -85,6 +85,27 @@ class MediaAutomator:
                 except Exception as e:
                     log(f"Warning: domcontentloaded timeout: {e}")
 
+                platform_config = {
+                    "directv": {"selector": "input"},
+                    "disney": {"selector": "input#searchInput"}
+                }
+
+                matched_platform = next((p for p in platform_config if p in self.platform.lower()), None)
+
+                if matched_platform:
+                    config = platform_config[matched_platform]
+                    try:
+                        log(f"{matched_platform} platform detected. Attempting to pre-fill search via DOM using '{config['selector']}'...")
+                        input_sel = config['selector']
+                        await page.wait_for_selector(input_sel, timeout=30000)
+                        await page.fill(input_sel, target_text)
+                        await asyncio.sleep(1)
+                        await page.keyboard.press("Enter")
+                        log(f"{matched_platform} search pre-filled and submitted.")
+                        await asyncio.sleep(3)
+                    except Exception as e:
+                        log(f"Could not pre-fill {matched_platform} search: {e}")
+
                 try:
                     # Hide scrollbars and disable ALL animations/transitions to radically speed up state changes
                     css_injection = """
@@ -174,6 +195,7 @@ class MediaAutomator:
                     await asyncio.sleep(1.0)
                     attempt = 1
                     latest_state = {"screen_arr": None}
+                    last_gemini_call_time = [time.time()]
                     
                     def compute_ssim(i1, i2):
                         C1 = 6.5025
@@ -319,15 +341,21 @@ class MediaAutomator:
                             scale = min(640/w, 360/h)
                             screen_img = cv2.resize(raw_img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
                             
-                            if latest_state["screen_arr"] is not None and screen_img.shape == latest_state["screen_arr"].shape:
-                                ssim_val = compute_ssim(screen_img, latest_state["screen_arr"])
-                                if ssim_val >= 0.95:
-                                    log(f"Skipping Gemini call: Screenshot SSIM ({ssim_val:.2f}) >= 0.95 (visually identical)")
-                                    skip_call = True
+                            time_since_last_call = time.time() - last_gemini_call_time[0]
+
+                            if time_since_last_call < 2.0:
+                                if latest_state["screen_arr"] is not None and screen_img.shape == latest_state["screen_arr"].shape:
+                                    ssim_val = compute_ssim(screen_img, latest_state["screen_arr"])
+                                    if ssim_val >= 0.95:
+                                        log(f"Skipping Gemini call: Screenshot SSIM ({ssim_val:.2f}) >= 0.95 (visually identical)")
+                                        skip_call = True
+                            else:
+                                log(f"Forcing Gemini call: {time_since_last_call:.1f}s elapsed since last call.")
                                     
                             latest_state["screen_arr"] = screen_img
 
                             if not skip_call:
+                                last_gemini_call_time[0] = time.time()
                                 t = asyncio.create_task(fire_gemini_call(screenshot_bytes, viewport, rects, ref_bytes_list, attempt, screen_img))
                                 tasks.append(t)
                                 active_gemini_tasks.append(t)
@@ -401,14 +429,14 @@ class MediaAutomator:
             return None
 
     def gemini_fallback(self, screenshot_bytes, program_name, viewport, rects, ref_bytes_list=None, media_type="unknown", description=None):
-        desc_str = f" The program is described as: {description}" if description else ""
+        desc_str = f" The program's description is: {description}" if description else ""
         prompt = (f"You are a streaming service web navigator whose goal is to successfully navigate {self.platform} "
                   f"to watch this {media_type} program called {program_name}.{desc_str} You will receive a screenshot "
                   f"of the current state of the user's computer. A colored bounding box with a number label has been drawn around every interactive element to help you click.\n"
                   f"If the website is asking you to login, pause and wait for an update. If it is asking you to select a user profile, select "
                   f"Leah first and then Jon if not available by clicking on their profile picture. "
-                  f"If you are looking at search results, find the title card for the program if available "
-                  f"and click on its numbered box. Finally, if the program has been selected already and you see the play button, click on that.\n\n"
+                  f"If you are looking at search results, find the title card for the program "
+                  f"and click on its numbered box. If searching for a sports event, ensure you select the game listed as today. Finally, if the program has been selected already and you see the play button, click on that.\n\n"
                   f"If the program is already actively playing in a fullscreen or inline video player, without needing a click, return {{\"action\": \"complete\"}}.\n\n"
                   f"Respond ONLY with a JSON object. If you need to click, include 'action': 'click' and 'id': <the integer number from the box>. If you need to wait, return {{\"action\": \"wait\"}}. Do NOT use markdown code blocks.")
         

@@ -77,6 +77,7 @@ export default function Player({ item, service, onClose }: PlayerProps) {
             // Unified Auto-Play sequence
             await bridge.invoke('desktop:auto-play', { 
               targetText: item.title,
+              platform: service.name,
               mediaType: item.type,
               visionPrompt: `Navigate to and play ${item.title}`, 
               referenceUrl: item.backdropUrl || item.posterUrl,

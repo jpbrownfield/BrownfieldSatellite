@@ -30,6 +30,135 @@ if (isNW && fs && path) {
 
 let activeStreamWindow: any = null;
 let activeAgentProcesses: any[] = [];
+let osRemoteProcess: any = null;
+
+function initRemoteMouse() {
+  if (!isNW || !spawn) return;
+  if (osRemoteProcess) return;
+
+  try {
+    let executable = 'python';
+    const venvPython = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+    
+    // 1. Try Venv first in dev
+    if (fs.existsSync(venvPython)) {
+      executable = venvPython;
+    }
+
+    let args = [path.join(process.cwd(), 'automation', 'remote_mouse.py')];
+
+    // 2. Fallback to Prod EXE
+    if (!fs.existsSync(args[0])) {
+      const prodExecutable = path.join(path.dirname(process.execPath), 'remote_mouse.exe');
+      if (fs.existsSync(prodExecutable)) {
+        executable = prodExecutable;
+        args = [];
+      } else {
+        console.warn("[Bridge] No remote_mouse script or EXE found.");
+        return;
+      }
+    }
+    
+    console.log(`[Bridge] Spawning Remote Mouse: ${executable} ${args.join(' ')}`);
+    osRemoteProcess = spawn(executable, args);
+    
+    // Ensure the process is killed when the main NW.js window closes
+    if (window.nw) {
+      window.nw.Window.get().on('close', () => {
+        if (osRemoteProcess) {
+          console.log("[Bridge] Killing Remote Mouse process on app close...");
+          osRemoteProcess.kill();
+        }
+        window.nw.Window.get().close(true);
+      });
+    }
+
+    osRemoteProcess.stdout.on('data', (data: any) => {
+      const out = data.toString();
+      
+      // Log all raw output to console for easier debugging
+      console.log(`[Remote Mouse Raw]: ${out.trim()}`);
+      if (isNW && fs) {
+        try { fs.appendFileSync(path.join(process.cwd(), 'nw-debug.log'), `[Remote Mouse Raw]: ${out.trim()}\n`); } catch(e) {}
+      }
+
+      try {
+        const parsed = JSON.parse(out);
+        if (parsed.log) {
+          if (isNW && fs) fs.appendFileSync(path.join(process.cwd(), 'nw-debug.log'), `[Remote Mouse HID]: ${parsed.log}\n`);
+        }
+        if (parsed.error) {
+          console.error(`[Remote Mouse ERROR]: ${parsed.error}`);
+          if (isNW && fs) fs.appendFileSync(path.join(process.cwd(), 'nw-debug.log'), `[Remote Mouse ERROR]: ${parsed.error}\n`);
+        }
+      } catch (e) {
+        // Not JSON, that's fine
+      }
+
+      if (out.includes('"kill"')) {
+        console.log('OS-Level remote mouse requested stream close (BrowserBack/BrowserHome pressed)');
+        if (activeStreamWindow) {
+          try { 
+            if (activeStreamWindow.kill) {
+              // If it's a Node ChildProcess (like our detached Chrome), we must forcefully kill its process tree on Windows
+              try {
+                const killProc = require('child_process').spawn('taskkill', ['/pid', activeStreamWindow.pid.toString(), '/f', '/t']);
+                killProc.on('error', () => { activeStreamWindow.kill(); }); // Fallback
+              } catch (e) {
+                activeStreamWindow.kill();
+              }
+            }
+            else activeStreamWindow.close();
+          } catch(e) {}
+          activeStreamWindow = null;
+        }
+        if (window.nw) {
+          try { window.nw.Window.get().emit('desktop:closed-remotely'); } catch(e){}
+        }
+      }
+      if (out.includes('"nav_home"')) {
+        if (window.nw) {
+          try { window.nw.Window.get().emit('desktop:nav-home'); } catch(e){}
+        }
+      }
+
+      if (out.includes('"voice_search"')) {
+        try {
+          const parsed = JSON.parse(out);
+          if (parsed.action === 'voice_search' && parsed.query) {
+            console.log(`[Voice Search Triggered]: ${parsed.query}`);
+            if (window.nw) {
+              window.nw.Window.get().emit('desktop:voice-search', parsed.query);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to parse voice_search JSON", e);
+        }
+      }
+    });
+
+    osRemoteProcess.stderr.on('data', (data: any) => {
+      const errOut = data.toString().trim();
+      if (errOut) {
+        console.error(`[Remote Mouse Error]: ${errOut}`);
+        if (isNW && fs) {
+          try { fs.appendFileSync(path.join(process.cwd(), 'nw-debug.log'), `[Remote Mouse Error]: ${errOut}\n`); } catch(e) {}
+        }
+      }
+    });
+
+    // Starts in "app" mode
+    try { osRemoteProcess.stdin.write(JSON.stringify({ mode: "app" }) + "\n"); } catch(e){}
+
+  } catch (e) {
+    console.error("Failed to attach global OS-level remote mouse script", e);
+  }
+}
+
+// Start persistence
+if (isNW) {
+  setTimeout(initRemoteMouse, 500); // Give fs time to be ready
+}
 
 // Helper to run Python/compiled sub-process
 const runAgent = (reqData: any): Promise<any> => {
@@ -104,8 +233,8 @@ const getSettings = async () => {
 
 export const bridge: Bridge = {
   isNW,
-  on: () => {},
-  removeListener: () => {},
+  on: (channel, func) => { if (isNW) (window as any).nw.Window.get().on(channel, func); },
+  removeListener: (channel, func) => { if (isNW) (window as any).nw.Window.get().removeListener(channel, func); },
   invoke: async (channel: string, ...args: any[]) => {
     switch (channel) {
       case 'settings:get': {
@@ -294,53 +423,18 @@ export const bridge: Bridge = {
 
               activeStreamWindow = chromeProcess;
               
-let osRemoteProcess: any = null;
+              if (osRemoteProcess) {
+                try { osRemoteProcess.stdin.write(JSON.stringify({ mode: "browser" }) + "\n"); } catch(e){}
+              }
 
               chromeProcess.on('close', (code: number) => {
                 console.log(`Chrome closed with code ${code}`);
                 activeStreamWindow = null;
                 if (osRemoteProcess) {
-                  try { osRemoteProcess.kill(); } catch (e) {}
-                  osRemoteProcess = null;
+                  try { osRemoteProcess.stdin.write(JSON.stringify({ mode: "app" }) + "\n"); } catch(e){}
                 }
               });
 
-              // Launch OS-level Python hook to listen for Backspace/Home and arrow keys
-              try {
-                let executable = 'python';
-                let args = [path.join(process.cwd(), 'automation', 'remote_mouse.py')];
-
-                if (!fs.existsSync(args[0])) {
-                  const prodExecutable = path.join(path.dirname(process.execPath), 'remote_mouse.exe');
-                  if (fs.existsSync(prodExecutable)) {
-                    executable = prodExecutable;
-                    args = [];
-                  }
-                }
-                
-                osRemoteProcess = spawn(executable, args);
-                
-                osRemoteProcess.stdout.on('data', (data: any) => {
-                  const out = data.toString();
-                  if (out.includes('"kill"')) {
-                    console.log('OS-Level remote mouse requested stream close (Backspace/Home pressed)');
-                    if (activeStreamWindow) {
-                      try { activeStreamWindow.kill(); } catch(e){}
-                      activeStreamWindow = null;
-                    }
-                    if (window.nw) {
-                      // Attempt to emit closed event to React UI
-                      try {
-                        const win = window.nw.Window.get();
-                        win.emit('desktop:closed-remotely');
-                      } catch(e){}
-                    }
-                  }
-                });
-              } catch (e) {
-                console.error("Failed to attach OS-level remote mouse script", e);
-              }
-              
               resolve({ success: true, usingRealBrowser: true });
             });
           }
@@ -361,6 +455,10 @@ let osRemoteProcess: any = null;
             }, (win: any) => {
               activeStreamWindow = win;
               
+              if (osRemoteProcess) {
+                try { osRemoteProcess.stdin.write(JSON.stringify({ mode: "browser" }) + "\n"); } catch(e){}
+              }
+
               // Inject a script into Netflix/Max to close the window when the remote hits Home/Back
               win.on('loaded', () => {
                 const script = `
@@ -432,6 +530,9 @@ let osRemoteProcess: any = null;
 
               win.on('closed', () => {
                 activeStreamWindow = null;
+                if (osRemoteProcess) {
+                  try { osRemoteProcess.stdin.write(JSON.stringify({ mode: "app" }) + "\n"); } catch(e){}
+                }
               });
               resolve({ success: true });
             });
@@ -474,6 +575,10 @@ let osRemoteProcess: any = null;
           try { p.kill(); } catch (e) {}
         });
         activeAgentProcesses = [];
+
+        if (osRemoteProcess) {
+          try { osRemoteProcess.stdin.write(JSON.stringify({ mode: "app" }) + "\n"); } catch(e){}
+        }
 
         if (isNW && activeStreamWindow) {
           try {

@@ -8,13 +8,20 @@ interface SearchScreenProps {
   myStuff: MediaItem[];
   onToggleStar: (item: MediaItem) => void;
   onSelect: (item: MediaItem) => void;
+  initialQuery?: string;
 }
 
-export default function SearchScreen({ onPlay, myStuff, onToggleStar, onSelect }: SearchScreenProps) {
-  const [query, setQuery] = useState('');
+export default function SearchScreen({ onPlay, myStuff, onToggleStar, onSelect, initialQuery }: SearchScreenProps) {
+  const [query, setQuery] = useState(initialQuery || '');
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialQuery) {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery]);
 
   useEffect(() => {
     inputRef.current?.focus();

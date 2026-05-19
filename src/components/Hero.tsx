@@ -125,6 +125,39 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
           {item.description}
         </p>
 
+        <div className="flex flex-wrap gap-4 mb-8">
+          {item.services.length > 0 ? (
+            item.services.map((service, idx) => (
+              <button
+                key={idx}
+                onClick={() => onPlay(service)}
+                className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold outline-none transition-all ${
+                  idx === 0
+                    ? 'bg-white text-black hover:bg-neutral-200 focus:bg-neutral-200 focus:ring-4 focus:ring-white/50 focus:scale-105'
+                    : 'bg-neutral-800/80 backdrop-blur-md text-white hover:bg-neutral-700 focus:bg-neutral-700 focus:ring-4 focus:ring-white/50 focus:scale-105'
+                }`}
+              >
+                <Play size={20} className="fill-current" />
+                {selectedEpisode 
+                  ? `Watch S${selectedSeason?.seasonNumber}E${selectedEpisode.episodeNumber} on ${service.name}`
+                  : `Watch on ${service.name}`
+                }
+              </button>
+            ))
+          ) : (
+            <button disabled className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold cursor-not-allowed">
+              Not available to stream
+            </button>
+          )}
+          <button 
+            onClick={() => onToggleStar(item)}
+            className="flex items-center gap-2 px-6 py-3 bg-neutral-800/80 backdrop-blur-md text-white rounded-full font-semibold hover:bg-neutral-700 focus:bg-neutral-700 focus:ring-4 focus:ring-white/50 focus:scale-105 outline-none transition-all"
+          >
+            <Star size={20} className={isStarred ? "fill-yellow-400 text-yellow-400" : ""} />
+            {isStarred ? 'In My Stuff' : 'Add to My Stuff'}
+          </button>
+        </div>
+
         {/* TV Show Season/Episode Selector */}
         {item.type === 'tv' && item.seasons && (
           <div className="mb-10">
@@ -172,39 +205,6 @@ export default function Hero({ item, onPlay, isStarred, onToggleStar, onClose }:
             </div>
           </div>
         )}
-        
-        <div className="flex flex-wrap gap-4">
-          {item.services.length > 0 ? (
-            item.services.map((service, idx) => (
-              <button
-                key={idx}
-                onClick={() => onPlay(service)}
-                className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold outline-none transition-all ${
-                  idx === 0
-                    ? 'bg-white text-black hover:bg-neutral-200 focus:bg-neutral-200 focus:ring-4 focus:ring-white/50 focus:scale-105'
-                    : 'bg-neutral-800/80 backdrop-blur-md text-white hover:bg-neutral-700 focus:bg-neutral-700 focus:ring-4 focus:ring-white/50 focus:scale-105'
-                }`}
-              >
-                <Play size={20} className="fill-current" />
-                {selectedEpisode 
-                  ? `Watch S${selectedSeason?.seasonNumber}E${selectedEpisode.episodeNumber} on ${service.name}`
-                  : `Watch on ${service.name}`
-                }
-              </button>
-            ))
-          ) : (
-            <button disabled className="flex items-center gap-2 px-6 py-3 bg-neutral-800 text-neutral-400 rounded-full font-semibold cursor-not-allowed">
-              Not available to stream
-            </button>
-          )}
-          <button 
-            onClick={() => onToggleStar(item)}
-            className="flex items-center gap-2 px-6 py-3 bg-neutral-800/80 backdrop-blur-md text-white rounded-full font-semibold hover:bg-neutral-700 focus:bg-neutral-700 focus:ring-4 focus:ring-white/50 focus:scale-105 outline-none transition-all"
-          >
-            <Star size={20} className={isStarred ? "fill-yellow-400 text-yellow-400" : ""} />
-            {isStarred ? 'In My Stuff' : 'Add to My Stuff'}
-          </button>
-        </div>
       </div>
       </div>
     </motion.div>
