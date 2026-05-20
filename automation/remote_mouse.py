@@ -5,7 +5,7 @@ import threading
 import time
 
 try:
-    import keyboard
+    from pynput import keyboard
     import pyautogui
     import hid
     from voice_control import VoiceController
@@ -20,30 +20,70 @@ pyautogui.PAUSE = 0 # Removes default 0.1s delay between pyautogui calls for smo
 is_browser_launched = False
 active_keys = set()
 voice_controller = VoiceController()
+kb_listener = None
 
-def on_key_event(event):
-    if event.event_type == 'down':
-        active_keys.add(event.name)
-        # Detailed logging to see exactly what scan codes and names are coming through
-        print(json.dumps({"log": f"DEBUG KEY: Name={event.name}, Scan={event.scan_code}, Time={event.time}"}), flush=True)
-        # We handle the actual Node routing via the HID loop!
-    elif event.event_type == 'up':
-        active_keys.discard(event.name)
+def get_key_name(key):
+    try:
+        if hasattr(key, 'char') and key.char:
+            return key.char
+        if hasattr(key, 'name'):
+            return key.name
+        return str(key)
+    except:
+        return str(key)
+
+def on_press(key):
+    name = get_key_name(key)
+    active_keys.add(name)
+    
+    # Debug log like before
+    # pynput doesn't give us clean scan codes easily without win32 extensions, 
+    # but we can log the key object representation
+    print(json.dumps({"log": f"DEBUG KEY: {name} pressed"}), flush=True)
+
+    # Suppression logic
+    # We want to suppress arrow keys, home, and the browser keys
+    suppress_list = ['up', 'down', 'left', 'right', 'home', 'media_previous', 'media_next', 'browser_back', 'browser_home']
+    
+    if name in suppress_list:
+        return False # This stops propagation in pynput
+
+def on_release(key):
+    name = get_key_name(key)
+    active_keys.discard(name)
 
 def set_hooks():
-    keyboard.unhook_all()
-    # Hook standard navigation keys for mouse movement and basic suppression
-    # Browser Home/Back are better handled via PowerToys suppression + our HID loop
-    nav_keys = ['up', 'down', 'left', 'right', 'home']
+    global kb_listener
+    if kb_listener:
+        kb_listener.stop()
     
-    for key in nav_keys:
-        try:
-            keyboard.hook_key(key, on_key_event, suppress=True)
-        except Exception:
-            pass
-            
-    # Keep the debug hook active for now so we can verify other keys if needed
-    keyboard.hook(on_key_event, suppress=False) 
+    # We use a win32_event_filter to selectively suppress keys in pynput
+    # This is the most surgical way to handle this on Windows.
+    # The filter returns False to suppress the event from Windows.
+    def win32_filter(msg, data):
+        global kb_listener
+        vk = data.vkCode
+        # Mapping VK codes back to our names for the mouse loop
+        vk_map = {37: 'left', 38: 'up', 39: 'right', 40: 'down', 36: 'home', 166: 'browser back', 172: 'browser start and home'}
+        
+        if vk in vk_map:
+            name = vk_map[vk]
+            if msg == 256 or msg == 260: # WM_KEYDOWN or WM_SYSKEYDOWN
+                if name not in active_keys:
+                    active_keys.add(name)
+                    print(json.dumps({"log": f"DEBUG KEY (Suppressed): {name} pressed"}), flush=True)
+            elif msg == 257 or msg == 261: # WM_KEYUP or WM_SYSKEYUP
+                active_keys.discard(name)
+
+            # Pynput's Windows suppression path.
+            if kb_listener:
+                kb_listener.suppress_event()
+
+            return True
+        return True # Allow everything else (physical keyboard typing, etc)
+
+    kb_listener = keyboard.Listener(win32_event_filter=win32_filter)
+    kb_listener.start()
 
 def listen_to_node():
     global is_browser_launched
@@ -176,5 +216,6 @@ set_hooks()
 
 print(json.dumps({"status": "ready"}), flush=True)
 
-# Block forever listening (will be killed by the Node parent process when the stream closes)
-keyboard.wait()
+# Block forever listening
+while True:
+    time.sleep(1)
